@@ -44,7 +44,10 @@ fun UpdateDialog(app: VisorApp) {
         .map { it.replace(Regex("""\s+by @\S+.*$"""), "").replace(Regex("""\s+in https://\S+"""), "") }
         .take(6)
 
-    Dialog(onDismissRequest = { if (!downloading) u.dismiss(rel) }) {
+    Dialog(
+        onDismissRequest = { if (!downloading) u.dismiss(rel) },
+        properties = androidx.compose.ui.window.DialogProperties(usePlatformDefaultWidth = false),
+    ) {
         Column(
             Modifier.width(460.dp).clip(RoundedCornerShape(20.dp)).background(p.surface).padding(22.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp),

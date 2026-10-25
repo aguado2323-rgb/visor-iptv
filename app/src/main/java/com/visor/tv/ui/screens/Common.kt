@@ -30,6 +30,10 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.unit.sp
+import androidx.compose.ui.graphics.Color
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.ui.window.DialogProperties
 import com.visor.tv.data.Category
 import com.visor.tv.ui.Empty
 import com.visor.tv.ui.ListRow
@@ -116,22 +120,18 @@ fun dayHm(ms: Long): String = SimpleDateFormat("EEE d MMM · HH:mm", Locale("es"
 fun ActionsDialog(title: String, actions: List<Pair<String, () -> Unit>>, onDismiss: () -> Unit, subtitle: String? = null) {
     val p = LocalPalette.current
     val first = remember { FocusRequester() }
-    Dialog(onDismissRequest = onDismiss) {
+    // Sin el ancho por defecto del sistema, que en Fire TV es estrecho y cortaba los botones
+    Dialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false)) {
         Column(
-            Modifier.width(360.dp).clip(RoundedCornerShape(20.dp)).background(p.surface)
-                .verticalScroll(rememberScrollState()).padding(18.dp),
-            verticalArrangement = Arrangement.spacedBy(6.dp),
+            Modifier.width(480.dp).heightIn(max = 470.dp).clip(RoundedCornerShape(20.dp)).background(p.surface)
+                .verticalScroll(rememberScrollState()).padding(horizontal = 18.dp, vertical = 20.dp),
+            verticalArrangement = Arrangement.spacedBy(4.dp),
         ) {
-            T(title, Type.h2, maxLines = 2)
-            if (subtitle != null) T(subtitle, Type.small, p.muted, maxLines = 3)
-            Box(Modifier.size(4.dp))
+            T(title, Type.h2, maxLines = 2, modifier = Modifier.padding(horizontal = 6.dp))
+            if (subtitle != null) T(subtitle, Type.small, p.muted, maxLines = 4, modifier = Modifier.padding(horizontal = 6.dp))
+            Box(Modifier.size(6.dp))
             actions.forEachIndexed { i, (label, action) ->
-                TvButton(
-                    text = label,
-                    onClick = { action(); onDismiss() },
-                    modifier = Modifier.fillMaxWidth(),
-                    focusRequester = if (i == 0) first else null,
-                )
+                MenuRow(label, if (i == 0) first else null) { action(); onDismiss() }
             }
         }
     }
@@ -185,5 +185,27 @@ fun SortButton(current: com.visor.tv.data.SortBy, onPick: (com.visor.tv.data.Sor
             com.visor.tv.data.SortBy.entries.map { o -> ((if (o == current) "✓ " else "") + o.label) to { onPick(o) } },
             onDismiss = { open = false },
         )
+    }
+}
+
+
+/** Opción de un menú: ocupa todo el ancho y admite dos líneas, para que nunca se corte. */
+@Composable
+fun MenuRow(label: String, focusRequester: FocusRequester? = null, onClick: () -> Unit) {
+    val p = LocalPalette.current
+    com.visor.tv.ui.Focusable(
+        onClick = onClick,
+        focusRequester = focusRequester,
+        shape = RoundedCornerShape(12.dp),
+        modifier = Modifier.fillMaxWidth(),
+    ) { focused ->
+        Box(
+            Modifier
+                .fillMaxWidth()
+                .background(if (focused) p.focusBg else Color.Transparent)
+                .padding(horizontal = 16.dp, vertical = 13.dp),
+        ) {
+            T(label, Type.label.copy(fontSize = 15.sp), if (focused) p.focusText else p.text, maxLines = 2)
+        }
     }
 }

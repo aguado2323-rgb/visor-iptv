@@ -114,9 +114,9 @@ fun TimerDialog(
     val endMs = startMs + lengthMin * 60_000L
     fun hhmm(m: Int) = "%02d:%02d".format((m / 60) % 24, m % 60)
 
-    Dialog(onDismissRequest = onDismiss) {
+    Dialog(onDismissRequest = onDismiss, properties = androidx.compose.ui.window.DialogProperties(usePlatformDefaultWidth = false)) {
         Column(
-            Modifier.width(440.dp).clip(RoundedCornerShape(20.dp)).background(p.surface).padding(20.dp),
+            Modifier.width(520.dp).clip(RoundedCornerShape(20.dp)).background(p.surface).padding(22.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             T("Programar grabación", Type.h2)
