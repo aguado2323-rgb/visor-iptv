@@ -28,12 +28,17 @@ android {
 
     signingConfigs {
         create("release") {
-            val ks = System.getenv("VISOR_KEYSTORE_PATH")
-            if (ks != null && file(ks).exists()) {
-                storeFile = file(ks)
-                storePassword = System.getenv("VISOR_KEYSTORE_PASSWORD")
-                keyAlias = System.getenv("VISOR_KEY_ALIAS")
-                keyPassword = System.getenv("VISOR_KEY_PASSWORD")
+            // Clave fija del proyecto (repo privado): todas las compilaciones firman igual,
+            // así el APK se actualiza encima sin desinstalar ni perder la sesión.
+            val props = java.util.Properties()
+            val pf = file("signing.properties")
+            if (pf.exists()) pf.inputStream().use { props.load(it) }
+            val ks = System.getenv("VISOR_KEYSTORE_PATH")?.let { file(it) } ?: file("visor-release.jks")
+            if (ks.exists()) {
+                storeFile = ks
+                storePassword = System.getenv("VISOR_KEYSTORE_PASSWORD") ?: props.getProperty("visorStorePassword")
+                keyAlias = System.getenv("VISOR_KEY_ALIAS") ?: "visor"
+                keyPassword = System.getenv("VISOR_KEY_PASSWORD") ?: System.getenv("VISOR_KEYSTORE_PASSWORD") ?: props.getProperty("visorStorePassword")
             }
         }
     }
