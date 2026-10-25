@@ -10,6 +10,7 @@ enum class Engine(val label: String) { EXO("ExoPlayer"), VLC("VLC") }
 enum class LiveFormat(val label: String, val ext: String) { TS("MPEG-TS", "ts"), HLS("HLS", "m3u8") }
 enum class ArtSource(val label: String) { PROVIDER("Proveedor"), TMDB("TMDB") }
 enum class AudioLang(val label: String, val code: String?) { ES("Español", "es"), EN("Inglés", "en"), ORIGINAL("Original", null) }
+enum class RefreshEvery(val label: String, val hours: Int) { OFF("Nunca", 0), H6("Cada 6 horas", 6), H12("Cada 12 horas", 12), H24("Cada día", 24) }
 enum class SubsDefault(val label: String, val code: String?) { OFF("Desactivados", null), ES("Español", "es"), EN("Inglés", "en") }
 
 /** Ajustes no sensibles. Son estado de Compose, así que la interfaz se actualiza al cambiarlos. */
@@ -39,6 +40,10 @@ class Settings(context: Context) {
         private set
     var pinOnStart by mutableStateOf(p.getBoolean("pinStart", false))
         private set
+    var refreshEvery by mutableStateOf(load("refresh", RefreshEvery.H12))
+        private set
+
+    fun updateRefresh(v: RefreshEvery) { refreshEvery = v; p.edit().putString("refresh", v.name).apply() }
 
     fun updateTheme(v: ThemeMode) { theme = v; p.edit().putString("theme", v.name).apply() }
     fun updateEngine(v: Engine) { engine = v; p.edit().putString("engine", v.name).apply() }

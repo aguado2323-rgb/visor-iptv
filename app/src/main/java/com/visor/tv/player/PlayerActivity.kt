@@ -4,6 +4,13 @@ import android.os.Bundle
 import android.view.WindowManager
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.layout.size
+import androidx.compose.runtime.produceState
+import com.visor.tv.ui.Focusable
+import com.visor.tv.ui.Img
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.background
 import androidx.compose.foundation.focusable
@@ -85,6 +92,7 @@ private fun PlayerScreen(app: VisorApp, onExit: () -> Unit) {
     var engineType by remember { mutableStateOf(app.settings.engine) }
     var overlay by remember { mutableStateOf(true) }
     var panel by remember { mutableStateOf(false) }
+    var guide by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
     var epgNow by remember { mutableStateOf<EpgEntry?>(null) }
     var pos by remember { mutableLongStateOf(0L) }
@@ -140,12 +148,23 @@ private fun PlayerScreen(app: VisorApp, onExit: () -> Unit) {
             delay(500)
             pos = engine.position(); dur = engine.duration(); playing = engine.isPlaying()
             if (overlay && !panel && error == null && System.currentTimeMillis() - lastKey > 6000) overlay = false
+            if (guide && System.currentTimeMillis() - lastKey > 15000) guide = false
             if (++tick % 60 == 0) saveProgress()
         }
     }
-    LaunchedEffect(overlay) {
+    LaunchedEffect(overlay, guide) {
+        if (guide) return@LaunchedEffect // la guía coloca el foco en el canal actual
         if (!overlay) try { rootFocus.requestFocus() } catch (_: Exception) { }
         else try { firstButton.requestFocus() } catch (_: Exception) { }
+    }
+
+    fun jumpTo(i: Int) {
+        saveProgress()
+        app.queue.index = i
+        app.queue.current?.let { n -> item = n; start(n) }
+        guide = false
+        overlay = true
+        lastKey = System.currentTimeMillis()
     }
 
     fun zap(delta: Int) {
@@ -155,6 +174,7 @@ private fun PlayerScreen(app: VisorApp, onExit: () -> Unit) {
 
     BackHandler {
         when {
+            guide -> guide = false
             panel -> panel = false
             overlay && error == null -> overlay = false
             else -> onExit()
@@ -167,17 +187,18 @@ private fun PlayerScreen(app: VisorApp, onExit: () -> Unit) {
             .background(Color.Black)
             .onPreviewKeyEvent { e ->
                 if (e.type == KeyEventType.KeyDown) lastKey = System.currentTimeMillis()
-                if (e.type != KeyEventType.KeyDown || overlay) return@onPreviewKeyEvent false
+                if (e.type != KeyEventType.KeyDown || overlay || guide) return@onPreviewKeyEvent false
                 when (e.key) {
                     Key.DirectionUp -> { if (isLive) zap(-1) else overlay = true; true }
                     Key.DirectionDown -> { if (isLive) zap(1) else overlay = true; true }
-                    Key.DirectionLeft -> { if (!isLive) engine.seekBy(-10_000); overlay = true; true }
+                    Key.DirectionLeft -> { if (isLive) guide = true else { engine.seekBy(-10_000); overlay = true }; true }
                     Key.DirectionRight -> { if (!isLive) engine.seekBy(30_000); overlay = true; true }
                     Key.MediaPlayPause, Key.MediaPlay, Key.MediaPause -> { engine.togglePause(); true }
                     Key.MediaFastForward -> { engine.seekBy(30_000); true }
                     Key.MediaRewind -> { engine.seekBy(-10_000); true }
-                    Key.Menu -> { overlay = true; panel = true; true }
-                    Key.DirectionCenter, Key.Enter, Key.NumPadEnter -> { overlay = true; true }
+                    Key.Menu -> { overlay = true; if (!isLive) panel = true; true }
+                    // En directo, OK abre la guía de canales sin salir del vídeo; ≡ Menú muestra los controles.
+                    Key.DirectionCenter, Key.Enter, Key.NumPadEnter -> { if (isLive) guide = true else overlay = true; true }
                     else -> false
                 }
             }
@@ -207,7 +228,8 @@ private fun PlayerScreen(app: VisorApp, onExit: () -> Unit) {
                 T(listOf(item.subtitle, item.title).filter { it.isNotBlank() }.joinToString(" · "), Type.h2)
                 if (isLive) {
                     val e = epgNow
-                    T(if (e != null) "${hm(e.start)} – ${hm(e.end)} · ${e.title}" else "En directo · ↑ ↓ para cambiar de canal", Type.small, p.muted)
+                    T(if (e != null) "${hm(e.start)} – ${hm(e.end)} · ${e.title}" else "En directo", Type.small, p.muted)
+                    T("OK o ← guía de canales · ↑ ↓ cambiar de canal · ≡ opciones", Type.small, p.muted)
                     if (e != null) {
                         val frac = ((System.currentTimeMillis() - e.start).toFloat() / (e.end - e.start)).coerceIn(0f, 1f)
                         ProgressBar(frac)
@@ -250,6 +272,10 @@ private fun PlayerScreen(app: VisorApp, onExit: () -> Unit) {
 
         if (panel) {
             TracksPanel(engine, tracksVersion, Modifier.align(Alignment.CenterEnd)) { tracksVersion++ }
+        }
+
+        if (guide && isLive) {
+            ChannelGuidePanel(app, app.queue.items, app.queue.index, Modifier.align(Alignment.CenterStart)) { i -> jumpTo(i) }
         }
     }
 }
@@ -294,4 +320,68 @@ private fun TracksPanel(engine: PlayerEngine, version: Int, modifier: Modifier, 
         if (subs.isEmpty()) T("Este contenido no trae subtítulos", Type.small, p.muted)
     }
     LaunchedEffect(Unit) { try { first.requestFocus() } catch (_: Exception) { } }
+}
+
+
+/** Guía de canales encima del vídeo: la lista de la carpeta con lo que echan ahora en cada canal. */
+@Composable
+private fun ChannelGuidePanel(app: VisorApp, items: List<PlayItem>, current: Int, modifier: Modifier, onPick: (Int) -> Unit) {
+    val p = LocalPalette.current
+    val listState = rememberLazyListState(initialFirstVisibleItemIndex = (current - 3).coerceAtLeast(0))
+    val currentFocus = remember { FocusRequester() }
+    Column(
+        modifier
+            .width(440.dp)
+            .fillMaxHeight()
+            .background(p.surface.copy(alpha = 0.96f))
+            .padding(horizontal = 14.dp, vertical = 18.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        T("Canales", Type.h2, modifier = Modifier.padding(start = 8.dp))
+        T("OK para cambiar · Atrás para cerrar", Type.small, p.muted, Modifier.padding(start = 8.dp))
+        LazyColumn(state = listState, verticalArrangement = Arrangement.spacedBy(3.dp)) {
+            itemsIndexed(items, key = { _, it -> it.key }) { i, it ->
+                GuideChannelRow(app, it, i == current, if (i == current) currentFocus else null) { onPick(i) }
+            }
+        }
+    }
+    LaunchedEffect(Unit) {
+        delay(60)
+        try { currentFocus.requestFocus() } catch (_: Exception) { }
+    }
+}
+
+@Composable
+private fun GuideChannelRow(app: VisorApp, it: PlayItem, playing: Boolean, fr: FocusRequester?, onClick: () -> Unit) {
+    val p = LocalPalette.current
+    val epg by produceState<List<EpgEntry>?>(null, it.id) {
+        delay(200) // al bajar rápido no se piden guías que no se llegan a ver
+        value = app.repo.shortEpg(it.id, 3)
+    }
+    val now = epg?.firstOrNull { e -> e.isNow() }
+    val next = epg?.firstOrNull { e -> now != null && e.start >= now.end }
+    Focusable(onClick = onClick, focusRequester = fr, shape = RoundedCornerShape(12.dp), modifier = Modifier.fillMaxWidth()) { focused ->
+        val fg = if (focused) p.focusText else p.text
+        Row(
+            Modifier.fillMaxWidth().background(if (focused) p.focusBg else Color.Transparent).padding(horizontal = 10.dp, vertical = 8.dp),
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Img(it.icon, Modifier.width(44.dp).height(30.dp).clip(RoundedCornerShape(6.dp)), crop = false)
+            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
+                    if (playing) Box(Modifier.size(7.dp).clip(CircleShape).background(p.rec))
+                    T((if (it.subtitle.isNotBlank()) it.subtitle + "  " else "") + it.title, Type.label, fg)
+                }
+                T(now?.let { e -> "${e.title} · hasta ${hm(e.end)}" } ?: if (epg == null) "…" else "Sin guía", Type.small, fg.copy(alpha = 0.75f))
+                if (now != null) {
+                    val frac = ((System.currentTimeMillis() - now.start).toFloat() / (now.end - now.start)).coerceIn(0f, 1f)
+                    Box(Modifier.fillMaxWidth().height(2.dp).clip(CircleShape).background(fg.copy(alpha = 0.2f))) {
+                        Box(Modifier.fillMaxWidth(frac).height(2.dp).background(fg))
+                    }
+                }
+                if (focused && next != null) T("Después: ${hm(next.start)} ${next.title}", Type.small, fg.copy(alpha = 0.65f))
+            }
+        }
+    }
 }

@@ -65,7 +65,7 @@ private fun rating(r: String): String? = r.toDoubleOrNull()?.takeIf { it > 0 }?.
 
 @Composable
 fun MoviesScreen(app: VisorApp, nav: Nav) {
-    val cats = load(Unit) { app.repo.vodCategories() }
+    val cats = load(app.repo.version) { app.repo.vodCategories() }
     var selected by rememberSaveable { mutableStateOf<String?>(null) }
     Row(Modifier.fillMaxSize(), horizontalArrangement = Arrangement.spacedBy(28.dp)) {
         LoadView(cats) { list ->
@@ -78,7 +78,7 @@ fun MoviesScreen(app: VisorApp, nav: Nav) {
                 null -> {}
                 SEARCH_FOLDER -> SearchPanel("Buscar película", { app.repo.allVod() }, { it.name }) { found -> MovieGrid(app, nav, found) }
                 else -> {
-                    val items = load(sel, app.favorites.items.size) {
+                    val items = load(sel, app.favorites.items.size, app.repo.version) {
                         when (sel) {
                             FAV_FOLDER -> app.favorites.of("vod").map { it.toVod() }
                             NEW_FOLDER -> app.repo.latestVod(30)
@@ -176,7 +176,7 @@ fun MovieDetail(app: VisorApp, vod: VodStream) {
 
 @Composable
 fun SeriesScreen(app: VisorApp, nav: Nav) {
-    val cats = load(Unit) { app.repo.seriesCategories() }
+    val cats = load(app.repo.version) { app.repo.seriesCategories() }
     var selected by rememberSaveable { mutableStateOf<String?>(null) }
     Row(Modifier.fillMaxSize(), horizontalArrangement = Arrangement.spacedBy(28.dp)) {
         LoadView(cats) { list ->
@@ -189,7 +189,7 @@ fun SeriesScreen(app: VisorApp, nav: Nav) {
                 null -> {}
                 SEARCH_FOLDER -> SearchPanel("Buscar serie", { app.repo.allSeries() }, { it.name }) { found -> SeriesGrid(app, nav, found) }
                 else -> {
-                    val items = load(sel, app.favorites.items.size) {
+                    val items = load(sel, app.favorites.items.size, app.repo.version) {
                         when (sel) {
                             FAV_FOLDER -> app.favorites.of("series").map { it.toSeries() }
                             NEW_FOLDER -> app.repo.latestSeries(30)

@@ -65,7 +65,7 @@ fun <R> SearchPanel(
     val p = LocalPalette.current
     var field by remember { mutableStateOf(TextFieldValue("")) }
     val query = field.text
-    val all = load(Unit) { withContext(Dispatchers.IO) { source().map { normalize(name(it)) to it } } }
+    val all = load(com.visor.tv.VisorApp.instance.repo.version) { withContext(Dispatchers.IO) { source().map { normalize(name(it)) to it } } }
     val keyboard = LocalSoftwareKeyboardController.current
     val focus = LocalFocusManager.current
     val fieldFocus = remember { FocusRequester() }

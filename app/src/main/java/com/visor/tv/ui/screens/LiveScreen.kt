@@ -42,7 +42,7 @@ fun FavItem.toLive() = LiveStream(id = id, num = num, name = name, icon = icon, 
 
 @Composable
 fun LiveScreen(app: VisorApp) {
-    val cats = load(Unit) { app.repo.liveCategories() }
+    val cats = load(app.repo.version) { app.repo.liveCategories() }
     var selected by rememberSaveable { mutableStateOf(FAV_FOLDER) }
     var menuFor by remember { mutableStateOf<LiveStream?>(null) }
     var timerFor by remember { mutableStateOf<LiveStream?>(null) }
@@ -57,7 +57,7 @@ fun LiveScreen(app: VisorApp) {
                     ChannelList(app, found, onMenu = { menuFor = it })
                 }
             } else {
-                val streams = load(selected, app.favorites.items.size) {
+                val streams = load(selected, app.favorites.items.size, app.repo.version) {
                     if (selected == FAV_FOLDER) app.favorites.of("live").map { it.toLive() } else app.repo.liveStreams(selected)
                 }
                 T("OK para ver · ≡ Menú para favoritos y grabar", Type.small, LocalPalette.current.muted, Modifier.padding(start = 12.dp, bottom = 6.dp))

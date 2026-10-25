@@ -49,7 +49,7 @@ private const val WINDOW_MIN = 180
 fun GuideScreen(app: VisorApp) {
     val p = LocalPalette.current
     val ctx = LocalContext.current
-    val cats = load(Unit) { app.repo.liveCategories() }
+    val cats = load(app.repo.version) { app.repo.liveCategories() }
     var selected by rememberSaveable { mutableStateOf(FAV_FOLDER) }
     var info by remember { mutableStateOf<Pair<LiveStream, EpgEntry>?>(null) }
     var dialog by remember { mutableStateOf<Pair<LiveStream, EpgEntry>?>(null) }
@@ -76,7 +76,7 @@ fun GuideScreen(app: VisorApp) {
                     T("Elige un programa: OK para ver si está en emisión o para grabarlo si es futuro.", Type.small, p.muted, maxLines = 2)
                 }
             }
-            val streams = load(selected, app.favorites.items.size) {
+            val streams = load(selected, app.favorites.items.size, app.repo.version) {
                 if (selected == FAV_FOLDER) app.favorites.of("live").map { it.toLive() } else app.repo.liveStreams(selected)
             }
             LoadView(streams) { list ->

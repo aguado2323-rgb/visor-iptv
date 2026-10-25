@@ -79,8 +79,8 @@ fun ChannelTile(f: FavItem, onClick: () -> Unit, onMenu: () -> Unit) {
 
 @Composable
 fun HomeScreen(app: VisorApp, nav: Nav) {
-    val movies = load(Unit) { app.repo.latestVod(30) }
-    val shows = load(Unit) { app.repo.latestSeries(30) }
+    val movies = load(app.repo.version) { app.repo.latestVod(30) }
+    val shows = load(app.repo.version) { app.repo.latestSeries(30) }
 
     // Todo se dimensiona a partir del alto disponible, para que en una tele 16:9 quepa sin cortarse ni desplazarse.
     BoxWithConstraints(Modifier.fillMaxSize()) {

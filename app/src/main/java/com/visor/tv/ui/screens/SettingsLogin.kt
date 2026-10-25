@@ -159,6 +159,7 @@ fun PinPad(title: String, onDone: (String) -> Boolean, subtitle: String? = null,
 fun SettingsScreen(app: VisorApp, nav: Nav) {
     val p = LocalPalette.current
     val s = app.settings
+    val scope = rememberCoroutineScope()
     var pinMode by remember { mutableStateOf<String?>(null) } // "new"
     var confirmLogout by remember { mutableStateOf(false) }
     var msg by remember { mutableStateOf<String?>(null) }
@@ -228,6 +229,15 @@ fun SettingsScreen(app: VisorApp, nav: Nav) {
         if (app.vault.hasPin()) {
             item { ListRow("Pedir PIN al abrir la app", trailing = if (s.pinOnStart) "Sí" else "No", onClick = { s.updatePinOnStart(!s.pinOnStart) }) }
             item { ListRow("Quitar PIN", onClick = { app.vault.setPin(null); s.updatePinOnStart(false); msg = "PIN eliminado" }) }
+        }
+        item { ListRow("Actualizar la lista automáticamente", subtitle = "Canales, películas y series nuevas del proveedor", trailing = s.refreshEvery.label, onClick = { s.updateRefresh(s.refreshEvery.next()) }) }
+        item {
+            val last = app.repo.lastRefresh
+            ListRow(
+                if (app.repo.refreshing) "Actualizando la lista…" else "Actualizar la lista ahora",
+                subtitle = if (last > 0) "Última actualización: " + SimpleDateFormat("d MMM, HH:mm", Locale("es")).format(Date(last)) else "Aún no se ha actualizado",
+                onClick = { if (!app.repo.refreshing) scope.launch { msg = if (app.repo.refreshAll()) "Lista actualizada" else "No se pudo actualizar: revisa la conexión" } },
+            )
         }
         item { ListRow("Vaciar caché de listas", subtitle = "Vuelve a descargar carpetas y fichas", onClick = { app.repo.clearCache(); msg = "Caché vaciada" }) }
         item { ListRow("Cerrar sesión", subtitle = "Borra la cuenta de este aparato", onClick = { confirmLogout = true }) }

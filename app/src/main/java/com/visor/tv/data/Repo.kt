@@ -3,6 +3,7 @@ package com.visor.tv.data
 import android.content.Context
 import android.net.Uri
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import kotlinx.coroutines.Dispatchers
@@ -28,6 +29,19 @@ class Repo(private val ctx: Context, private val http: OkHttpClient, private val
 
     var account by mutableStateOf(vault.loadAccount())
         private set
+
+    /** Sube cada vez que se actualiza la lista; las pantallas lo usan como clave para recargar. */
+    var version by mutableIntStateOf(0)
+        private set
+
+    /** true mientras se está descargando la lista de nuevo. */
+    var refreshing by mutableStateOf(false)
+        private set
+
+    private val prefs = ctx.getSharedPreferences("repo", Context.MODE_PRIVATE)
+
+    /** Momento de la última actualización completa de la lista (ms), 0 si nunca. */
+    val lastRefresh: Long get() = prefs.getLong("lastRefresh", 0L)
 
     private val mem = ConcurrentHashMap<String, Any>()
     private val epgMem = ConcurrentHashMap<Int, Pair<Long, List<EpgEntry>>>()
@@ -88,6 +102,7 @@ class Repo(private val ctx: Context, private val http: OkHttpClient, private val
         vault.saveAccount(a)
         account = a
         mem.clear(); epgMem.clear()
+        prefs.edit().putLong("lastRefresh", System.currentTimeMillis()).apply()
         return info
     }
 
@@ -109,6 +124,33 @@ class Repo(private val ctx: Context, private val http: OkHttpClient, private val
         vault.saveAccount(null)
         account = null
         clearCache()
+    }
+
+    /**
+     * Vuelve a descargar categorías y listas completas, sustituye la caché y avisa a la interfaz.
+     * Si falla la red, se queda la lista anterior y no se toca nada.
+     */
+    suspend fun refreshAll(): Boolean {
+        if (refreshing || account == null) return false
+        withContext(Dispatchers.Main) { refreshing = true }
+        return try {
+            withContext(Dispatchers.IO) {
+                val a = acc()
+                val fresh = FULL_LISTS.associateWith { fetch(a, it) } // todo o nada: si falla una, no se guarda ninguna
+                val keep = fresh.keys.map { cacheFile(it) }.toSet()
+                fresh.forEach { (params, el) -> cacheFile(params).writeText(el.toString()) }
+                // Las carpetas sueltas se vuelven a pedir cuando se abran
+                dir.listFiles()?.forEach { f -> if (f !in keep) f.delete() }
+            }
+            mem.clear(); epgMem.clear()
+            prefs.edit().putLong("lastRefresh", System.currentTimeMillis()).apply()
+            withContext(Dispatchers.Main) { version++ }
+            true
+        } catch (e: Exception) {
+            false
+        } finally {
+            withContext(Dispatchers.Main) { refreshing = false }
+        }
     }
 
     fun clearCache() {
@@ -278,6 +320,10 @@ class Repo(private val ctx: Context, private val http: OkHttpClient, private val
     }
 
     companion object {
+        private val FULL_LISTS = listOf(
+            "&action=get_live_categories", "&action=get_vod_categories", "&action=get_series_categories",
+            "&action=get_live_streams", "&action=get_vod_streams", "&action=get_series",
+        )
         private const val TTL_LIST = 6 * 60 * 60_000L
         private const val TTL_INFO = 24 * 60 * 60_000L
     }
