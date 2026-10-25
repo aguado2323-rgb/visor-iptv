@@ -14,6 +14,7 @@ import com.visor.tv.ui.Img
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.background
 import androidx.compose.foundation.focusable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -50,6 +51,8 @@ import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import androidx.compose.ui.text.font.FontWeight
 import com.visor.tv.VisorApp
 import com.visor.tv.data.EpgEntry
 import com.visor.tv.data.Engine
@@ -214,11 +217,12 @@ private fun PlayerScreen(app: VisorApp, onExit: () -> Unit) {
             }
         }
 
-        if (overlay) {
+        // Con el panel de audio y subtítulos abierto, los controles de abajo se ocultan para no quedar cortados.
+        if (overlay && !panel) {
             Column(
                 Modifier
                     .align(Alignment.BottomStart)
-                    .padding(start = 28.dp, end = if (panel) 330.dp else 28.dp, bottom = 24.dp)
+                    .padding(start = 28.dp, end = 28.dp, bottom = 24.dp)
                     .fillMaxWidth()
                     .clip(RoundedCornerShape(22.dp))
                     .background(p.surface.copy(alpha = 0.94f))
@@ -244,7 +248,7 @@ private fun PlayerScreen(app: VisorApp, onExit: () -> Unit) {
                 if (error != null) {
                     T("No se pudo reproducir ($error). Prueba con el otro reproductor o con otro formato en Ajustes.", Type.small, p.rec, maxLines = 2)
                 }
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     TvButton(if (playing) "Pausa" else "Reanudar", focusRequester = firstButton, onClick = { engine.togglePause() })
                     if (!isLive) {
                         TvButton("−10 s", onClick = { engine.seekBy(-10_000) })
@@ -296,28 +300,26 @@ private fun TracksPanel(engine: PlayerEngine, version: Int, modifier: Modifier, 
     val first = remember { FocusRequester() }
     Column(
         modifier
-            .width(300.dp)
+            .width(460.dp)
             .fillMaxHeight()
             .background(p.surface.copy(alpha = 0.97f))
             .verticalScroll(rememberScrollState())
-            .padding(20.dp),
-        verticalArrangement = Arrangement.spacedBy(6.dp),
+            .padding(horizontal = 24.dp, vertical = 28.dp),
+        verticalArrangement = Arrangement.spacedBy(4.dp),
     ) {
-        T("Audio y subtítulos", Type.h2)
-        T("Idioma del audio", Type.small, p.muted, Modifier.padding(top = 8.dp))
-        if (audio.isEmpty()) T("Solo hay una pista", Type.small, p.muted)
+        T("Audio y subtítulos", Type.heading)
+        T("Atrás para cerrar", Type.small, p.muted)
+        T("IDIOMA DEL AUDIO", Type.small.copy(fontWeight = FontWeight.Bold), p.muted, Modifier.padding(top = 18.dp, bottom = 4.dp))
+        if (audio.isEmpty()) T("Este contenido solo tiene una pista de audio", Type.body, p.muted)
         audio.forEachIndexed { i, t ->
-            TvButton(t.label, selected = t.selected, modifier = Modifier.fillMaxWidth(), focusRequester = if (i == 0) first else null,
-                onClick = { engine.selectAudio(t.id); onChanged() })
+            TrackRow(t.label, t.selected, if (i == 0) first else null) { engine.selectAudio(t.id); onChanged() }
         }
-        T("Subtítulos", Type.small, p.muted, Modifier.padding(top = 10.dp))
-        TvButton("Desactivados", selected = subs.none { it.selected }, modifier = Modifier.fillMaxWidth(),
-            focusRequester = if (audio.isEmpty()) first else null,
-            onClick = { engine.selectSubtitle(null); onChanged() })
+        T("SUBTÍTULOS", Type.small.copy(fontWeight = FontWeight.Bold), p.muted, Modifier.padding(top = 18.dp, bottom = 4.dp))
+        TrackRow("Desactivados", subs.none { it.selected }, if (audio.isEmpty()) first else null) { engine.selectSubtitle(null); onChanged() }
         subs.forEach { t ->
-            TvButton(t.label, selected = t.selected, modifier = Modifier.fillMaxWidth(), onClick = { engine.selectSubtitle(t.id); onChanged() })
+            TrackRow(t.label, t.selected, null) { engine.selectSubtitle(t.id); onChanged() }
         }
-        if (subs.isEmpty()) T("Este contenido no trae subtítulos", Type.small, p.muted)
+        if (subs.isEmpty()) T("Este contenido no trae subtítulos", Type.body, p.muted, Modifier.padding(top = 4.dp))
     }
     LaunchedEffect(Unit) { try { first.requestFocus() } catch (_: Exception) { } }
 }
@@ -382,6 +384,27 @@ private fun GuideChannelRow(app: VisorApp, it: PlayItem, playing: Boolean, fr: F
                 }
                 if (focused && next != null) T("Después: ${hm(next.start)} ${next.title}", Type.small, fg.copy(alpha = 0.65f))
             }
+        }
+    }
+}
+
+
+/** Fila de pista a todo el ancho del panel: marca ✓ la activa y deja hasta dos líneas para nombres largos. */
+@Composable
+private fun TrackRow(label: String, selected: Boolean, fr: FocusRequester?, onClick: () -> Unit) {
+    val p = LocalPalette.current
+    Focusable(onClick = onClick, focusRequester = fr, shape = RoundedCornerShape(12.dp), modifier = Modifier.fillMaxWidth()) { focused ->
+        val fg = if (focused) p.focusText else p.text
+        Row(
+            Modifier
+                .fillMaxWidth()
+                .background(if (focused) p.focusBg else if (selected) p.surface2 else Color.Transparent)
+                .padding(horizontal = 16.dp, vertical = 12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            T(if (selected) "✓" else "", Type.label, fg, Modifier.width(16.dp))
+            T(label, Type.label.copy(fontSize = 15.sp), fg, Modifier.weight(1f), maxLines = 2)
         }
     }
 }
