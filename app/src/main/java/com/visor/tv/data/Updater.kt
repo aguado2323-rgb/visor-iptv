@@ -55,7 +55,7 @@ class Updater(private val ctx: Context, private val http: OkHttpClient) {
             http.newCall(req).execute().use { r ->
                 if (!r.isSuccessful) return@withContext null
                 val o = json.parseToJsonElement(r.body?.string() ?: return@withContext null).asObj() ?: return@withContext null
-                val tag = o.s("tag_name").removePrefix("v")
+                val tag = o.s("tag_name").removePrefix("v").removePrefix("V").replace('_', '.')
                 val asset = o["assets"].asArr().mapNotNull { it.asObj() }.firstOrNull { it.s("name").endsWith(".apk") }
                     ?: return@withContext null
                 val rel = Release(tag, o.s("body"), asset.s("browser_download_url"), asset.l("size"))
@@ -139,7 +139,7 @@ class Updater(private val ctx: Context, private val http: OkHttpClient) {
 
         /** Compara versiones "0.10.2" > "0.9.7" número a número. */
         fun isNewer(candidate: String, current: String): Boolean {
-            fun parts(v: String) = v.split('.', '-').map { it.toIntOrNull() ?: 0 }
+            fun parts(v: String) = v.split('.', '-', '_').map { it.toIntOrNull() ?: 0 }
             val a = parts(candidate); val b = parts(current)
             for (i in 0 until maxOf(a.size, b.size)) {
                 val x = a.getOrElse(i) { 0 }; val y = b.getOrElse(i) { 0 }

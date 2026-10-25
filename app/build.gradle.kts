@@ -23,7 +23,7 @@ android {
         // En GitHub Actions: versionCode = nº de ejecución (siempre sube, así Android acepta la actualización)
         // y versionName = la etiqueta de la release (v0.2.0 → 0.2.0), o 0.1.<nº> en compilaciones normales.
         val run = System.getenv("GITHUB_RUN_NUMBER")?.toIntOrNull()
-        val tag = System.getenv("GITHUB_REF_NAME")?.takeIf { System.getenv("GITHUB_REF_TYPE") == "tag" }?.removePrefix("v")
+        val tag = System.getenv("GITHUB_REF_NAME")?.takeIf { System.getenv("GITHUB_REF_TYPE") == "tag" }?.removePrefix("v")?.replace('_', '.')
         versionCode = (run ?: 0) + 1
         versionName = tag ?: if (run != null) "0.1.$run" else "0.1.0-local"
         buildConfigField("String", "TMDB_API_KEY", "\"$tmdbKey\"")
