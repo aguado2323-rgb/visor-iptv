@@ -78,6 +78,7 @@ class PlayerActivity : ComponentActivity() {
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         val app = application as VisorApp
         if (app.queue.current == null) { finish(); return }
+        MiniPlayer.stop() // solo un vídeo a la vez
         setContent {
             VisorTheme(app.settings.theme) {
                 PlayerScreen(app) { finish() }
@@ -300,6 +301,11 @@ private fun PlayerScreen(app: VisorApp, onExit: () -> Unit) {
                             app.favorites.toggle(FavItem(type = favType, id = item.id, name = item.title, icon = item.icon, ext = item.ext, epgId = item.epgId, num = item.subtitle.toIntOrNull() ?: 0))
                         })
                     }
+                    if (isLive) TvButton("Ver en ventana", onClick = {
+                        // El canal sigue en una ventana pequeña mientras navegas por la app
+                        MiniPlayer.start(app, item, engineType)
+                        onExit()
+                    })
                     TvButton("Usar ${if (engineType == Engine.EXO) "VLC" else "ExoPlayer"}", onClick = {
                         saveProgress()
                         engineType = if (engineType == Engine.EXO) Engine.VLC else Engine.EXO

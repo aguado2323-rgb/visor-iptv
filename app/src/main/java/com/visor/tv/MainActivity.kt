@@ -39,6 +39,14 @@ import com.visor.tv.data.PlayItem
 import com.visor.tv.data.SeriesItem
 import com.visor.tv.data.VodStream
 import com.visor.tv.player.PlayerActivity
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.type
+import com.visor.tv.player.MiniPlayer
+import com.visor.tv.player.MiniPlayerWindow
+import com.visor.tv.ui.TvButton
 import com.visor.tv.ui.Focusable
 import com.visor.tv.ui.LocalPalette
 import com.visor.tv.ui.T
@@ -86,6 +94,12 @@ class Nav {
 }
 
 class MainActivity : ComponentActivity() {
+    override fun onStop() {
+        super.onStop()
+        // Al salir de la app (botón Inicio) o al abrir otro vídeo, la ventana se cierra
+        MiniPlayer.stop()
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
@@ -125,7 +139,18 @@ private fun Root(app: VisorApp, onExit: () -> Unit) {
         }
     }
 
-    Box(Modifier.fillMaxSize().background(p.bg)) {
+    val ctx = androidx.compose.ui.platform.LocalContext.current
+    Box(
+        Modifier
+            .fillMaxSize()
+            .background(p.bg)
+            // Con un canal en ventana, Play/Pausa del mando lo vuelve a poner a pantalla completa
+            .onPreviewKeyEvent { e ->
+                if (MiniPlayer.active && e.type == KeyEventType.KeyUp &&
+                    (e.key == Key.MediaPlayPause || e.key == Key.MediaPlay)
+                ) { MiniPlayer.expand(ctx); true } else false
+            }
+    ) {
         when {
             app.repo.account == null -> LoginScreen(app)
             !unlocked -> PinPad(title = "Introduce el PIN", onDone = { pin ->
@@ -143,6 +168,7 @@ private fun Root(app: VisorApp, onExit: () -> Unit) {
                     is Route.Show -> SeriesDetail(app, r.series)
                 }
                 if (app.updater.prompt) UpdateDialog(app)
+                MiniPlayerWindow(Modifier.align(Alignment.BottomEnd).padding(24.dp))
             }
         }
     }
@@ -201,7 +227,14 @@ private fun TabsScaffold(app: VisorApp, nav: Nav) {
                     }
                 }
             }
-            T(now, Type.h2)
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                MiniPlayer.item?.let { mini ->
+                    val ctx = androidx.compose.ui.platform.LocalContext.current
+                    TvButton("⛶ ${mini.title}", onClick = { MiniPlayer.expand(ctx) })
+                    TvButton("✕", onClick = { MiniPlayer.stop() })
+                }
+                T(now, Type.h2)
+            }
         }
         Spacer(Modifier.height(18.dp))
         Box(Modifier.fillMaxSize()) {
