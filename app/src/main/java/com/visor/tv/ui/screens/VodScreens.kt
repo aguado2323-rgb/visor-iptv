@@ -30,6 +30,11 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.ui.unit.sp
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.platform.LocalContext
@@ -133,17 +138,26 @@ fun MovieDetail(app: VisorApp, vod: VodStream) {
 
     Box(Modifier.fillMaxSize().background(p.bg)) {
         val i = info.orNull()
-        val backdrop = art?.backdrop?.ifBlank { null } ?: i?.backdrop.orEmpty()
-        if (backdrop.isNotBlank()) {
-            Img(backdrop, Modifier.fillMaxWidth(0.62f).aspectRatio(16f / 9f).align(androidx.compose.ui.Alignment.TopEnd))
-            Box(Modifier.fillMaxSize().background(p.bg.copy(alpha = 0.55f)))
-        }
-        Row(Modifier.fillMaxSize().padding(40.dp), horizontalArrangement = Arrangement.spacedBy(28.dp)) {
+        // Imagen a pantalla completa: fondo de la película o, si no hay, su carátula.
+        val backdrop = art?.backdrop?.ifBlank { null } ?: i?.backdrop?.ifBlank { null } ?: i?.cover?.ifBlank { null } ?: vod.icon
+        Img(backdrop, Modifier.fillMaxHeight().fillMaxWidth(0.72f).align(Alignment.CenterEnd))
+        // Degradados para que el texto se lea sin tapar la imagen
+        Box(Modifier.fillMaxSize().background(Brush.horizontalGradient(0.30f to p.bg, 0.55f to p.bg.copy(alpha = 0.75f), 0.85f to Color.Transparent)))
+        Box(Modifier.fillMaxSize().background(Brush.verticalGradient(0.70f to Color.Transparent, 1f to p.bg.copy(alpha = 0.85f))))
+
+        Row(
+            Modifier.fillMaxSize().padding(horizontal = 44.dp, vertical = 32.dp),
+            horizontalArrangement = Arrangement.spacedBy(28.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
             Img(
                 art?.poster?.ifBlank { null } ?: i?.cover?.ifBlank { null } ?: vod.icon,
-                Modifier.width(170.dp).aspectRatio(2f / 3f).clip(RoundedCornerShape(14.dp)),
+                Modifier.fillMaxHeight(0.78f).aspectRatio(2f / 3f).clip(RoundedCornerShape(14.dp)),
             )
-            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Column(
+                Modifier.fillMaxWidth(0.62f).fillMaxHeight(),
+                verticalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterVertically),
+            ) {
                 T("Películas", Type.small, p.muted)
                 T(i?.name?.ifBlank { null } ?: vod.name, Type.title, maxLines = 2)
                 val meta = listOfNotNull(
@@ -152,11 +166,15 @@ fun MovieDetail(app: VisorApp, vod: VodStream) {
                 ).joinToString(" · ")
                 if (meta.isNotBlank()) T(meta, Type.body, p.muted)
                 val plot = art?.overview?.ifBlank { null } ?: i?.plot.orEmpty()
-                if (plot.isNotBlank()) T(plot, Type.body, p.text, maxLines = 6)
+                when {
+                    plot.isNotBlank() -> T(plot, Type.body.copy(fontSize = 15.sp, lineHeight = 22.sp), p.text, maxLines = 9)
+                    info is Load.Loading -> T("Cargando sinopsis…", Type.body, p.muted)
+                    else -> T("El proveedor no incluye sinopsis para esta película.", Type.body, p.muted)
+                }
                 if (!i?.director.isNullOrBlank()) T("Dirección: ${i?.director}", Type.small, p.muted)
                 if (!i?.cast.isNullOrBlank()) T("Reparto: ${i?.cast}", Type.small, p.muted, maxLines = 2)
                 if (info is Load.Err) T("No se pudo cargar la ficha completa.", Type.small, p.muted)
-                Spacer(Modifier.height(8.dp))
+                Spacer(Modifier.height(6.dp))
                 Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                     val ext = i?.ext ?: vod.ext
                     val item = PlayItem(kind = "vod", id = vod.id, ext = ext, title = vod.name, icon = vod.icon)
