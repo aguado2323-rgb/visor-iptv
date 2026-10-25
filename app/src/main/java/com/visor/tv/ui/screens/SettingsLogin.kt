@@ -162,6 +162,8 @@ fun SettingsScreen(app: VisorApp, nav: Nav) {
     val scope = rememberCoroutineScope()
     var pinMode by remember { mutableStateOf<String?>(null) } // "new"
     var confirmLogout by remember { mutableStateOf(false) }
+    val backup = remember { com.visor.tv.data.Backup(app) }
+    var toRestore by remember { mutableStateOf<com.visor.tv.data.BackupData?>(null) }
     var msg by remember { mutableStateOf<String?>(null) }
 
     if (app.vault.hasPin() && !nav.settingsUnlocked) {
@@ -242,6 +244,28 @@ fun SettingsScreen(app: VisorApp, nav: Nav) {
         item { ListRow("Vaciar caché de listas", subtitle = "Vuelve a descargar carpetas y fichas", onClick = { app.repo.clearCache(); msg = "Caché vaciada" }) }
         item { ListRow("Cerrar sesión", subtitle = "Borra la cuenta de este aparato", onClick = { confirmLogout = true }) }
         if (msg != null) item { T(msg!!, Type.small, p.muted, Modifier.padding(12.dp)) }
+        item { T("Copia de seguridad", Type.small, p.muted, Modifier.padding(start = 12.dp, top = 12.dp, bottom = 4.dp)) }
+        item {
+            val last = backup.lastBackup()
+            ListRow(
+                "Crear copia de seguridad",
+                subtitle = (if (last > 0) "Última: ${com.visor.tv.data.Backup.dateOf(last)}. " else "") +
+                    "Favoritos, progreso, recientes, ajustes y grabaciones programadas",
+                onClick = { scope.launch { msg = "Guardando…"; msg = backup.export().message } },
+            )
+        }
+        item {
+            ListRow(
+                "Restaurar copia de seguridad",
+                subtitle = "La cuenta no se guarda en la copia: tendrás que volver a entrar con tus datos",
+                onClick = {
+                    scope.launch {
+                        val d = backup.peek()
+                        if (d == null) msg = "No se encontró ninguna copia (${com.visor.tv.data.Backup.FILE_NAME})." else toRestore = d
+                    }
+                },
+            )
+        }
         item { T("Aplicación", Type.small, p.muted, Modifier.padding(start = 12.dp, top = 12.dp, bottom = 4.dp)) }
         item {
             ListRow(
@@ -255,6 +279,26 @@ fun SettingsScreen(app: VisorApp, nav: Nav) {
                 },
             )
         }
+    }
+
+    toRestore?.let { d ->
+        ActionsDialog(
+            "¿Restaurar la copia?",
+            listOf(
+                "Sí, restaurar" to {
+                    scope.launch {
+                        val r = backup.restore(d)
+                        msg = r.message
+                        if (r.ok) { kotlinx.coroutines.delay(1500); backup.restartApp() }
+                    }
+                    Unit
+                },
+                "Cancelar" to {},
+            ),
+            onDismiss = { toRestore = null },
+            subtitle = "Copia del ${com.visor.tv.data.Backup.dateOf(d.created)}: ${d.favorites.size} favoritos, " +
+                "${d.progress.size} a medias, ${d.recordings.size} grabaciones programadas. Sustituye lo que tienes ahora.",
+        )
     }
 
     if (confirmLogout) {

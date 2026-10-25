@@ -42,6 +42,11 @@ class Favorites(context: Context) {
         return nowFav
     }
 
+    /** Para restaurar una copia de seguridad. */
+    fun replaceAll(list: List<FavItem>) {
+        items.clear(); items.addAll(list); save()
+    }
+
     private fun save() {
         try { file.writeText(json.encodeToString(items.toList())) } catch (_: Exception) { }
     }
@@ -69,6 +74,11 @@ class Progress(context: Context) {
 
     fun positionOf(key: String): Long = entries.firstOrNull { it.item.key == key }?.positionMs ?: 0L
 
+    fun replaceAll(list: List<ProgressEntry>) {
+        entries.clear(); entries.addAll(list)
+        try { file.writeText(json.encodeToString(entries.toList())) } catch (_: Exception) { }
+    }
+
     fun update(item: PlayItem, pos: Long, dur: Long) {
         if (item.kind == "live" || dur <= 0) return
         entries.removeAll { it.item.key == item.key }
@@ -78,5 +88,27 @@ class Progress(context: Context) {
         }
         while (entries.size > 40) entries.removeAt(entries.lastIndex)
         try { file.writeText(json.encodeToString(entries.toList())) } catch (_: Exception) { }
+    }
+}
+
+
+/** Últimos canales vistos, el más reciente primero. */
+class RecentChannels(context: Context) {
+    private val file = File(context.filesDir, "recent_channels.json")
+    private val json = Json { ignoreUnknownKeys = true }
+    val items = mutableStateListOf<PlayItem>()
+
+    init {
+        try {
+            if (file.exists()) items.addAll(json.decodeFromString<List<PlayItem>>(file.readText()))
+        } catch (_: Exception) { }
+    }
+
+    fun add(item: PlayItem) {
+        if (item.kind != "live") return
+        items.removeAll { it.id == item.id }
+        items.add(0, item)
+        while (items.size > 15) items.removeAt(items.lastIndex)
+        try { file.writeText(json.encodeToString(items.toList())) } catch (_: Exception) { }
     }
 }

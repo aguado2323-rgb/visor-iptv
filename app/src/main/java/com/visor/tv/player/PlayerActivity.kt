@@ -132,6 +132,7 @@ private fun PlayerScreen(app: VisorApp, onExit: () -> Unit) {
         val url = try { app.repo.urlFor(it, app.settings.liveFormat.ext) } catch (e: Exception) { error = "Sin cuenta"; return }
         engine.prepare(url, app.progress.positionOf(it.key), it.kind == "live")
         playing = true
+        app.recents.add(it)
     }
 
     fun hasNext() = item.kind == "episode" && app.queue.index < app.queue.items.lastIndex
@@ -187,9 +188,9 @@ private fun PlayerScreen(app: VisorApp, onExit: () -> Unit) {
         } catch (_: Exception) { }
     }
 
-    fun jumpTo(i: Int) {
+    fun jumpTo(i: Int, list: List<PlayItem>? = null) {
         saveProgress()
-        app.queue.index = i
+        if (list != null) app.queue.set(list, i) else app.queue.index = i
         app.queue.current?.let { n -> item = n; start(n) }
         guide = false
         overlay = true
@@ -337,7 +338,7 @@ private fun PlayerScreen(app: VisorApp, onExit: () -> Unit) {
         }
 
         if (guide && isLive) {
-            ChannelGuidePanel(app, app.queue.items, app.queue.index, Modifier.align(Alignment.CenterStart)) { i -> jumpTo(i) }
+            ChannelGuidePanel(app, app.queue.items, app.queue.index, item.id, Modifier.align(Alignment.CenterStart)) { i, list -> jumpTo(i, list) }
         }
     }
 }
@@ -385,9 +386,20 @@ private fun TracksPanel(engine: PlayerEngine, version: Int, modifier: Modifier, 
 
 /** Guía de canales encima del vídeo: la lista de la carpeta con lo que echan ahora en cada canal. */
 @Composable
-private fun ChannelGuidePanel(app: VisorApp, items: List<PlayItem>, current: Int, modifier: Modifier, onPick: (Int) -> Unit) {
+private fun ChannelGuidePanel(
+    app: VisorApp,
+    items: List<PlayItem>,
+    current: Int,
+    playingId: Int,
+    modifier: Modifier,
+    onPick: (Int, List<PlayItem>?) -> Unit,
+) {
     val p = LocalPalette.current
-    val listState = rememberLazyListState(initialFirstVisibleItemIndex = (current - 3).coerceAtLeast(0))
+    var tab by remember { mutableIntStateOf(0) } // 0 = carpeta, 1 = recientes
+    // Recientes sin el canal que ya estás viendo
+    val recents = app.recents.items.filter { it.id != playingId }
+    val shown = if (tab == 0) items else recents
+    val focusIndex = if (tab == 0) current else 0
     val currentFocus = remember { FocusRequester() }
     Column(
         modifier
@@ -397,11 +409,23 @@ private fun ChannelGuidePanel(app: VisorApp, items: List<PlayItem>, current: Int
             .padding(horizontal = 14.dp, vertical = 18.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        T("Canales", Type.h2, modifier = Modifier.padding(start = 8.dp))
-        T("OK para cambiar · Atrás para cerrar", Type.small, p.muted, Modifier.padding(start = 8.dp))
-        LazyColumn(state = listState, verticalArrangement = Arrangement.spacedBy(3.dp)) {
-            itemsIndexed(items, key = { _, it -> it.key }) { i, it ->
-                GuideChannelRow(app, it, i == current, if (i == current) currentFocus else null) { onPick(i) }
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(start = 4.dp)) {
+            TvButton("Esta carpeta", selected = tab == 0, onClick = { tab = 0 }, onFocused = { tab = 0 })
+            TvButton("Recientes (${recents.size})", selected = tab == 1, onClick = { tab = 1 }, onFocused = { tab = 1 })
+        }
+        T("OK para cambiar · ↑ para cambiar de lista · Atrás para cerrar", Type.small, p.muted, Modifier.padding(start = 8.dp))
+        if (shown.isEmpty()) {
+            T("Aún no hay canales recientes.", Type.small, p.muted, Modifier.padding(8.dp))
+        }
+        key(tab) {
+            val listState = rememberLazyListState(initialFirstVisibleItemIndex = (focusIndex - 3).coerceAtLeast(0))
+            LazyColumn(state = listState, verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                itemsIndexed(shown, key = { _, it -> it.key }) { i, it ->
+                    val isCurrent = it.id == playingId
+                    GuideChannelRow(app, it, isCurrent, if (i == focusIndex) currentFocus else null) {
+                        if (tab == 0) onPick(i, null) else onPick(i, recents)
+                    }
+                }
             }
         }
     }
