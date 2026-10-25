@@ -1,0 +1,47 @@
+name: Compilar APK
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - uses: gradle/actions/setup-gradle@v4
+
+      - name: Preparar firma
+        env:
+          KEYSTORE_B64: ${{ secrets.VISOR_KEYSTORE_B64 }}
+        run: |
+          if [ -n "$KEYSTORE_B64" ]; then
+            echo "$KEYSTORE_B64" | base64 -d > "$RUNNER_TEMP/visor.jks"
+            echo "VISOR_KEYSTORE_PATH=$RUNNER_TEMP/visor.jks" >> "$GITHUB_ENV"
+          else
+            echo "Sin keystore: se firmará con la clave de depuración"
+          fi
+
+      - name: Compilar
+        env:
+          VISOR_KEYSTORE_PASSWORD: ${{ secrets.VISOR_KEYSTORE_PASSWORD }}
+          VISOR_KEY_ALIAS: ${{ secrets.VISOR_KEY_ALIAS }}
+          VISOR_KEY_PASSWORD: ${{ secrets.VISOR_KEY_PASSWORD }}
+          TMDB_API_KEY: ${{ secrets.TMDB_API_KEY }}
+        run: |
+          chmod +x gradlew
+          ./gradlew --no-daemon assembleRelease
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: visor-apk
+          path: app/build/outputs/apk/release/*.apk
+          if-no-files-found: error

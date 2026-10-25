@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Solo se confía en los certificados del sistema (no en los instalados por el usuario),
+  así una app o un proxy en la red no puede descifrar el tráfico HTTPS con la lista.
+  El tráfico sin cifrar se permite solo porque muchos proveedores redirigen los
+  streams a servidores HTTP; la conexión de inicio de sesión y la API van por HTTPS.
+-->
+<network-security-config>
+    <base-config cleartextTrafficPermitted="true">
+        <trust-anchors>
+            <certificates src="system" />
+        </trust-anchors>
+    </base-config>
+</network-security-config>
