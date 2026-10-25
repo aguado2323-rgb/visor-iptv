@@ -105,13 +105,13 @@ private fun Root(app: VisorApp, onExit: () -> Unit) {
     val nav = remember { Nav() }
     var unlocked by remember { mutableStateOf(!(app.settings.pinOnStart && app.vault.hasPin())) }
 
-    // Actualización automática de la lista: al abrir la app y luego cada 30 min comprueba si toca.
+    // Actualización automática de la lista: al abrir la app y luego cada hora comprueba si toca.
     LaunchedEffect(app.repo.account, app.settings.refreshEvery) {
         if (app.repo.account == null) return@LaunchedEffect
         while (true) {
             val every = app.settings.refreshEvery.hours * 3_600_000L
             if (every > 0 && System.currentTimeMillis() - app.repo.lastRefresh >= every) app.repo.refreshAll()
-            delay(30 * 60_000L)
+            delay(60 * 60_000L)
         }
     }
 
