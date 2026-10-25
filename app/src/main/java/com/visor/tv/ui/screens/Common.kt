@@ -98,7 +98,13 @@ fun FolderColumn(
     onSelect: (String) -> Unit,
     width: Dp = 210.dp,
     entry: FolderEntry = remember { FolderEntry() },
+    /** Si se indica, ≡ sobre una carpeta del proveedor abre el menú para ocultarla, moverla o bloquearla. */
+    manage: FolderManage? = null,
 ) {
+    val app = com.visor.tv.VisorApp.instance
+    var menuFor by remember { mutableStateOf<Category?>(null) }
+    var unlockFor by remember { mutableStateOf<String?>(null) }
+    val fixedIds = setOf(SEARCH_FOLDER, NEW_FOLDER, FAV_FOLDER)
     val p = LocalPalette.current
     // Al bajar desde las pestañas se entra en la carpeta elegida (o en la primera que no sea Buscar),
     // nunca directamente en el buscador; a Buscar se llega subiendo.
@@ -118,15 +124,32 @@ fun FolderColumn(
                         onDispose { entry.attached = false }
                     }
                 }
+                val own = manage != null && c.id !in fixedIds
+                if (own) app.folders.version
                 ListRow(
-                    title = c.name,
+                    title = if (own) folderLabel(app, manage!!.type, c) else c.name,
                     selected = c.id == selected,
-                    onClick = { onSelect(c.id) },
+                    onClick = {
+                        onSelect(c.id)
+                        if (own && app.folders.isBlocked(manage!!.type, c.id)) unlockFor = c.id
+                    },
                     onFocused = { onSelect(c.id) },
+                    onMenu = if (own) ({ menuFor = c }) else null,
                     focusRequester = if (isTarget) target else null,
                 )
             }
         }
+    }
+    if (manage != null) {
+        menuFor?.let { c ->
+            FolderMenu(app, manage, c, onDismiss = { menuFor = null }, onHidden = {
+                // Al ocultar la carpeta elegida, pasa a la siguiente visible
+                val i = folders.indexOfFirst { it.id == c.id }
+                val next = folders.drop(i + 1).firstOrNull { it.id !in fixedIds } ?: folders.take(i).lastOrNull()
+                if (c.id == selected && next != null) onSelect(next.id)
+            })
+        }
+        unlockFor?.let { id -> UnlockFolderDialog(app, manage.type, id) { unlockFor = null } }
     }
 }
 

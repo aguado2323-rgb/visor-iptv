@@ -95,10 +95,18 @@ class Nav {
 }
 
 class MainActivity : ComponentActivity() {
+    override fun onStart() {
+        super.onStart()
+        (application as VisorApp).internalNav = false
+    }
+
     override fun onStop() {
         super.onStop()
         // Al salir de la app (botón Inicio) o al abrir otro vídeo, la ventana se cierra
         MiniPlayer.stop()
+        // Al salir de la app (no al abrir el reproductor), las carpetas bloqueadas se vuelven a cerrar
+        val app = application as VisorApp
+        if (!app.internalNav && !isChangingConfigurations) app.folders.relockAll()
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -116,6 +124,7 @@ class MainActivity : ComponentActivity() {
 fun play(ctx: Context, list: List<PlayItem>, index: Int) {
     if (list.isEmpty()) return
     VisorApp.instance.queue.set(list, index)
+    VisorApp.instance.internalNav = true
     ctx.startActivity(Intent(ctx, PlayerActivity::class.java))
 }
 
@@ -136,6 +145,16 @@ private fun Root(app: VisorApp, onExit: () -> Unit) {
         while (true) {
             val every = app.settings.refreshEvery.hours * 3_600_000L
             if (every > 0 && System.currentTimeMillis() - app.repo.lastRefresh >= every) app.repo.refreshAll()
+            delay(60 * 60_000L)
+        }
+    }
+
+    // Guía completa (XMLTV): se descarga al abrir la app si tiene más de 12 horas, y luego cada hora se comprueba
+    LaunchedEffect(app.repo.account) {
+        if (app.repo.account == null) return@LaunchedEffect
+        delay(5_000) // deja arrancar la interfaz primero
+        while (true) {
+            app.epg.refreshIfOld(app.repo, 12)
             delay(60 * 60_000L)
         }
     }

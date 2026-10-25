@@ -107,13 +107,15 @@ private fun ChannelStep(app: VisorApp, onPick: (LiveStream) -> Unit) {
         T("Cualquier canal de tu lista. Atrás para cerrar.", Type.small, p.muted, Modifier.padding(bottom = 10.dp))
         Row(Modifier.fillMaxSize().enterAtFolders(entry), horizontalArrangement = Arrangement.spacedBy(20.dp)) {
             LoadView(cats) { list ->
-                FolderColumn(fixedFolders(withNew = false) + list, selected, { selected = it }, width = 230.dp, entry = entry)
+                FolderColumn(fixedFolders(withNew = false) + arrangedFolders(app, "live", list), selected, { selected = it }, width = 230.dp, entry = entry)
             }
             Column(Modifier.weight(1f)) {
                 if (selected == SEARCH_FOLDER) {
-                    SearchPanel("Buscar canal", { app.repo.allLive() }, { it.name }) { found ->
+                    SearchPanel("Buscar canal", { val ex = app.folders.excludes("live"); app.repo.allLive().filterNot { ex(it.categoryId) } }, { it.name }) { found ->
                         PickChannelList(found, onPick)
                     }
+                } else if (isBlockedFolder(app, "live", selected)) {
+                    LockedPanel(app, "live", selected)
                 } else {
                     val streams = load(selected, app.repo.version) {
                         if (selected == FAV_FOLDER) app.favorites.of("live").map { it.toLive() } else app.repo.liveStreams(selected)
@@ -151,7 +153,7 @@ private fun ProgramStep(app: VisorApp, ch: LiveStream, onPick: (TimerPick) -> Un
     val first = remember { FocusRequester() }
     val epg = load(ch.id) {
         val now = System.currentTimeMillis()
-        app.repo.shortEpg(ch.id, 24).filter { it.end > now }.sortedBy { it.start }
+        app.repo.shortEpg(ch.id, 60).filter { it.end > now }.sortedBy { it.start }
     }
     val before = app.settings.marginBefore * 60_000L
     val after = app.settings.marginAfter * 60_000L

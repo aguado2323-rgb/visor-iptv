@@ -156,6 +156,7 @@ class Repo(private val ctx: Context, private val http: OkHttpClient, private val
     fun clearCache() {
         mem.clear(); epgMem.clear()
         dir.listFiles()?.forEach { it.delete() }
+        com.visor.tv.VisorApp.instance.epg.clear()
     }
 
     // ---------------- Listados ----------------
@@ -198,16 +199,18 @@ class Repo(private val ctx: Context, private val http: OkHttpClient, private val
     suspend fun allVod(): List<VodStream> = memo("vs:*") { parseVod(cached("&action=get_vod_streams", TTL_LIST)) }
     suspend fun allSeries(): List<SeriesItem> = memo("ss:*") { parseSeries(cached("&action=get_series", TTL_LIST)) }
 
-    /** Las [n] películas añadidas más recientemente a la lista. */
-    suspend fun latestVod(n: Int = 30): List<VodStream> = memo("vs:new") {
-        val all = allVod()
+    /** Las [n] películas añadidas más recientemente a la lista (sin carpetas ocultas ni bloqueadas). */
+    suspend fun latestVod(n: Int = 30): List<VodStream> = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Default) {
+        val ex = com.visor.tv.VisorApp.instance.folders.excludes("vod")
+        val all = allVod().filterNot { ex(it.categoryId) }
         if (all.any { it.added > 0 }) all.sortedByDescending { it.added }.take(n)
         else all.sortedByDescending { it.id }.take(n) // sin fecha: el id suele crecer con cada alta
     }
 
-    /** Las [n] series nuevas o actualizadas más recientemente. */
-    suspend fun latestSeries(n: Int = 30): List<SeriesItem> = memo("ss:new") {
-        val all = allSeries()
+    /** Las [n] series nuevas o actualizadas más recientemente (sin carpetas ocultas ni bloqueadas). */
+    suspend fun latestSeries(n: Int = 30): List<SeriesItem> = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Default) {
+        val ex = com.visor.tv.VisorApp.instance.folders.excludes("series")
+        val all = allSeries().filterNot { ex(it.categoryId) }
         if (all.any { it.updated > 0 }) all.sortedByDescending { it.updated }.take(n)
         else all.sortedByDescending { it.id }.take(n)
     }
@@ -316,8 +319,41 @@ class Repo(private val ctx: Context, private val http: OkHttpClient, private val
 
     // ---------------- EPG ----------------
 
-    /** Guía corta de un canal (próximas horas). Se guarda 10 minutos en memoria. */
+    /** Dirección de la guía completa (XMLTV). Solo en memoria. */
+    fun xmltvUrl(): String {
+        val a = acc(); return "${a.base}/xmltv.php?username=${enc(a.user)}&password=${enc(a.pass)}"
+    }
+
+    /** Id de EPG de un canal (el que usa la guía completa). */
+    suspend fun epgIdOf(streamId: Int): String? =
+        memo("ls:epgmap") { allLive().associate { it.id to it.epgId } }[streamId]?.takeIf { it.isNotBlank() }
+
+    /**
+     * Guía de un canal: lo que está en emisión y lo siguiente. Primero la guía completa descargada;
+     * si ese canal no está en ella, la guía corta de la API (10 minutos en memoria).
+     */
     suspend fun shortEpg(streamId: Int, limit: Int = 12): List<EpgEntry> {
+        val store = com.visor.tv.VisorApp.instance.epg
+        if (store.ready) {
+            val id = try { epgIdOf(streamId) } catch (e: Exception) { null }
+            if (id != null) store.upcoming(id, limit).takeIf { it.isNotEmpty() }?.let { return it }
+        }
+        return apiShortEpg(streamId, limit)
+    }
+
+    /** Programas de un canal entre dos horas (para la parrilla de la Guía). */
+    suspend fun epgRange(streamId: Int, from: Long, to: Long): List<EpgEntry> {
+        val store = com.visor.tv.VisorApp.instance.epg
+        if (store.ready) {
+            val id = try { epgIdOf(streamId) } catch (e: Exception) { null }
+            if (id != null) store.range(id, from, to).takeIf { it.isNotEmpty() }?.let { return it }
+        }
+        // Sin guía completa: la corta solo cubre de ahora en adelante
+        return if (to <= System.currentTimeMillis()) emptyList()
+        else apiShortEpg(streamId, 24).filter { it.end > from && it.start < to }
+    }
+
+    private suspend fun apiShortEpg(streamId: Int, limit: Int): List<EpgEntry> {
         epgMem[streamId]?.let { (t, list) -> if (System.currentTimeMillis() - t < 10 * 60_000) return list }
         val list = try {
             fetch(acc(), "&action=get_short_epg&stream_id=$streamId&limit=$limit").asObj()?.get("epg_listings").asArr()

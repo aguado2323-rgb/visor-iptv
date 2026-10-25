@@ -85,17 +85,32 @@ fun ChannelTile(f: FavItem, onClick: () -> Unit, onMenu: () -> Unit) {
 
 @Composable
 fun HomeScreen(app: VisorApp, nav: Nav) {
-    val movies = load(app.repo.version) { app.repo.latestVod(30) }
-    val shows = load(app.repo.version) { app.repo.latestSeries(30) }
+    val movies = load(app.repo.version, app.folders.version) { app.repo.latestVod(30) }
+    val shows = load(app.repo.version, app.folders.version) { app.repo.latestSeries(30) }
 
     // Todo se dimensiona a partir del alto disponible, para que en una tele 16:9 quepa sin cortarse ni desplazarse.
+    // "Seguir viendo": solo aparece si hay algo a medias
+    val cont = load(app.progress.entries.toList(), app.folders.version) { buildContinue(app) }.orNull().orEmpty()
+
     BoxWithConstraints(Modifier.fillMaxSize()) {
-        val fixed = 22.dp + 8.dp + 14.dp + 22.dp + 8.dp + 12.dp + 6.dp // rótulos, separaciones y márgenes de enfoque
+        val withCont = cont.isNotEmpty()
+        val fixed = 22.dp + 8.dp + 14.dp + 22.dp + 8.dp + 12.dp + 6.dp + // rótulos, separaciones y márgenes de enfoque
+            (if (withCont) 22.dp + 8.dp + 14.dp + 12.dp else 0.dp)
         val flex = (maxHeight - fixed).coerceAtLeast(240.dp)
-        val heroH = flex * 0.68f
-        val seriesH = flex * 0.32f
+        val contH = if (withCont) (flex * 0.28f).coerceIn(64.dp, 84.dp) else 0.dp
+        val heroH = (flex - contH) * 0.68f
+        val seriesH = (flex - contH) * 0.32f
 
         Column(Modifier.fillMaxSize()) {
+            if (withCont) {
+                Row(Modifier.height(22.dp), verticalAlignment = Alignment.Bottom) {
+                    T("Seguir viendo", Type.h2)
+                    T("   OK continúa donde lo dejaste · ≡ ver ficha o quitar", Type.small, LocalPalette.current.muted)
+                }
+                Spacer(Modifier.height(8.dp - 6.dp))
+                ContinueRow(app, nav, cont, contH)
+                Spacer(Modifier.height(14.dp - 6.dp))
+            }
             T("Películas nuevas", Type.h2, modifier = Modifier.height(22.dp))
             Spacer(Modifier.height(8.dp))
             LoadView(movies) { all ->

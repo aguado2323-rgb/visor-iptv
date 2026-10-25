@@ -50,13 +50,15 @@ fun LiveScreen(app: VisorApp) {
     val entry = remember { FolderEntry() }
     Row(Modifier.fillMaxSize().enterAtFolders(entry), horizontalArrangement = Arrangement.spacedBy(28.dp)) {
         LoadView(cats) { list ->
-            FolderColumn(fixedFolders(withNew = false) + list, selected, { selected = it }, entry = entry)
+            FolderColumn(fixedFolders(withNew = false) + arrangedFolders(app, "live", list), selected, { selected = it }, entry = entry, manage = FolderManage("live", list))
         }
         Column(Modifier.weight(1f)) {
             if (selected == SEARCH_FOLDER) {
-                SearchPanel("Buscar canal", { app.repo.allLive() }, { it.name }) { found ->
+                SearchPanel("Buscar canal", { val ex = app.folders.excludes("live"); app.repo.allLive().filterNot { ex(it.categoryId) } }, { it.name }) { found ->
                     ChannelList(app, found, onMenu = { menuFor = it })
                 }
+            } else if (isBlockedFolder(app, "live", selected)) {
+                LockedPanel(app, "live", selected)
             } else {
                 val streams = load(selected, app.favorites.items.size, app.repo.version) {
                     if (selected == FAV_FOLDER) app.favorites.of("live").map { it.toLive() } else app.repo.liveStreams(selected)

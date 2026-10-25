@@ -76,15 +76,15 @@ fun MoviesScreen(app: VisorApp, nav: Nav) {
     Row(Modifier.fillMaxSize().enterAtFolders(entry), horizontalArrangement = Arrangement.spacedBy(28.dp)) {
         LoadView(cats) { list ->
             if (selected == null) selected = NEW_FOLDER
-            FolderColumn(fixedFolders(withNew = true) + list, selected, { selected = it }, entry = entry)
+            FolderColumn(fixedFolders(withNew = true) + arrangedFolders(app, "vod", list), selected, { selected = it }, entry = entry, manage = FolderManage("vod", list))
         }
         val sel = selected
         Column(Modifier.weight(1f)) {
             when (sel) {
                 null -> {}
-                SEARCH_FOLDER -> SearchPanel("Buscar película", { app.repo.allVod() }, { it.name }) { found -> MovieGrid(app, nav, found) }
-                else -> {
-                    val items = load(sel, app.favorites.items.size, app.repo.version) {
+                SEARCH_FOLDER -> SearchPanel("Buscar película", { val ex = app.folders.excludes("vod"); app.repo.allVod().filterNot { ex(it.categoryId) } }, { it.name }) { found -> MovieGrid(app, nav, found) }
+                else -> if (isBlockedFolder(app, "vod", sel)) LockedPanel(app, "vod", sel) else {
+                    val items = load(sel, app.favorites.items.size, app.repo.version, app.folders.version) {
                         when (sel) {
                             FAV_FOLDER -> app.favorites.of("vod").map { it.toVod() }
                             NEW_FOLDER -> app.repo.latestVod(30)
@@ -140,15 +140,15 @@ fun SeriesScreen(app: VisorApp, nav: Nav) {
     Row(Modifier.fillMaxSize().enterAtFolders(entry), horizontalArrangement = Arrangement.spacedBy(28.dp)) {
         LoadView(cats) { list ->
             if (selected == null) selected = NEW_FOLDER
-            FolderColumn(fixedFolders(withNew = true) + list, selected, { selected = it }, entry = entry)
+            FolderColumn(fixedFolders(withNew = true) + arrangedFolders(app, "series", list), selected, { selected = it }, entry = entry, manage = FolderManage("series", list))
         }
         val sel = selected
         Column(Modifier.weight(1f)) {
             when (sel) {
                 null -> {}
-                SEARCH_FOLDER -> SearchPanel("Buscar serie", { app.repo.allSeries() }, { it.name }) { found -> SeriesGrid(app, nav, found) }
-                else -> {
-                    val items = load(sel, app.favorites.items.size, app.repo.version) {
+                SEARCH_FOLDER -> SearchPanel("Buscar serie", { val ex = app.folders.excludes("series"); app.repo.allSeries().filterNot { ex(it.categoryId) } }, { it.name }) { found -> SeriesGrid(app, nav, found) }
+                else -> if (isBlockedFolder(app, "series", sel)) LockedPanel(app, "series", sel) else {
+                    val items = load(sel, app.favorites.items.size, app.repo.version, app.folders.version) {
                         when (sel) {
                             FAV_FOLDER -> app.favorites.of("series").map { it.toSeries() }
                             NEW_FOLDER -> app.repo.latestSeries(30)

@@ -209,7 +209,10 @@ fun SeriesDetail(app: VisorApp, series: SeriesItem) {
     // Último episodio a medias de esta serie, para "Continuar"
     val lastWatched = app.progress.entries.filter { it.item.kind == "episode" && it.item.seriesId == series.id }.maxByOrNull { it.updated }
     val allEpisodes = si?.seasons?.values?.flatten().orEmpty()
-    val resumeEp = lastWatched?.let { lw -> allEpisodes.firstOrNull { it.id == lw.item.id } }
+    // Si el último visto está terminado, "Continuar" propone el siguiente episodio
+    val resumeEp = lastWatched?.let { lw ->
+        if (lw.done) si?.let { nextEpisode(it, lw.item.id) } else allEpisodes.firstOrNull { it.id == lw.item.id }
+    }
 
     var season by remember { mutableIntStateOf(-1) }
     var focusedEp by remember { mutableStateOf<Episode?>(null) }
@@ -250,7 +253,7 @@ fun SeriesDetail(app: VisorApp, series: SeriesItem) {
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.padding(top = 4.dp)) {
                 val first = si?.seasons?.values?.firstOrNull()?.firstOrNull()
                 when {
-                    resumeEp != null -> TvButton("▶ Continuar T${resumeEp.season} · E${resumeEp.num}", focusRequester = mainBtn, onClick = { playEpisode(resumeEp) })
+                    resumeEp != null -> TvButton((if (lastWatched?.done == true) "▶ Siguiente" else "▶ Continuar") + " T${resumeEp.season} · E${resumeEp.num}", focusRequester = mainBtn, onClick = { playEpisode(resumeEp) })
                     first != null -> TvButton("▶ Empezar T${first.season} · E${first.num}", focusRequester = mainBtn, onClick = { playEpisode(first) })
                     else -> TvButton(if (info is Load.Loading) "Cargando episodios…" else "Sin episodios", focusRequester = mainBtn, onClick = {})
                 }
@@ -305,7 +308,7 @@ private fun EpisodeCard(app: VisorApp, series: SeriesItem, e: Episode, onFocused
                     .border(if (focused) 3.dp else 0.dp, if (focused) p.focusBg else Color.Transparent, RoundedCornerShape(10.dp))
             ) {
                 Img(e.image.ifBlank { series.cover }, Modifier.fillMaxSize().clip(RoundedCornerShape(10.dp)))
-                if (prog != null) {
+                if (prog != null && !prog.done) {
                     Box(Modifier.align(Alignment.BottomCenter).padding(8.dp).fillMaxWidth()) {
                         ProgressLine(prog.positionMs.toFloat() / prog.durationMs)
                     }

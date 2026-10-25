@@ -58,6 +58,8 @@ data class ProgressEntry(
     val positionMs: Long,
     val durationMs: Long,
     val updated: Long,
+    /** Episodio terminado: sirve para proponer el siguiente en "Seguir viendo". */
+    val done: Boolean = false,
 )
 
 /** Puntos de reanudación para "Seguir viendo". */
@@ -72,7 +74,18 @@ class Progress(context: Context) {
         } catch (_: Exception) { }
     }
 
-    fun positionOf(key: String): Long = entries.firstOrNull { it.item.key == key }?.positionMs ?: 0L
+    fun positionOf(key: String): Long = entries.firstOrNull { it.item.key == key && !it.done }?.positionMs ?: 0L
+
+    /** Quita algo de "Seguir viendo". En una serie quita todos sus episodios. */
+    fun remove(item: PlayItem) {
+        if (item.kind == "episode" && item.seriesId > 0) entries.removeAll { it.item.kind == "episode" && it.item.seriesId == item.seriesId }
+        else entries.removeAll { it.item.key == item.key }
+        save()
+    }
+
+    private fun save() {
+        try { file.writeText(json.encodeToString(entries.toList())) } catch (_: Exception) { }
+    }
 
     fun replaceAll(list: List<ProgressEntry>) {
         entries.clear(); entries.addAll(list)
@@ -82,12 +95,16 @@ class Progress(context: Context) {
     fun update(item: PlayItem, pos: Long, dur: Long) {
         if (item.kind == "live" || dur <= 0) return
         entries.removeAll { it.item.key == item.key }
-        // Si queda menos del 5 %, se da por vista y sale de "Seguir viendo".
+        // Si queda menos del 5 %, se da por vista. Una película sale de "Seguir viendo"; de una serie se
+        // recuerda el episodio terminado (solo el último) para proponer el siguiente.
         if (pos > 30_000 && pos < dur * 0.95) {
             entries.add(0, ProgressEntry(item, pos, dur, System.currentTimeMillis()))
+        } else if (pos >= dur * 0.95 && item.kind == "episode" && item.seriesId > 0) {
+            entries.removeAll { it.done && it.item.seriesId == item.seriesId }
+            entries.add(0, ProgressEntry(item, dur, dur, System.currentTimeMillis(), done = true))
         }
-        while (entries.size > 40) entries.removeAt(entries.lastIndex)
-        try { file.writeText(json.encodeToString(entries.toList())) } catch (_: Exception) { }
+        while (entries.size > 60) entries.removeAt(entries.lastIndex)
+        save()
     }
 }
 

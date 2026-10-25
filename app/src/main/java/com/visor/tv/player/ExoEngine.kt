@@ -4,6 +4,8 @@ import android.content.Context
 import android.view.ViewGroup
 import androidx.annotation.OptIn
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.media3.common.C
@@ -128,9 +130,18 @@ class ExoEngine(
     override fun release() = player.release()
 
     @Composable
+    private var aspect by androidx.compose.runtime.mutableStateOf(com.visor.tv.data.Aspect.FIT)
+    override fun setAspect(a: com.visor.tv.data.Aspect) { aspect = a }
+
     override fun VideoSurface(modifier: Modifier) {
+        val mode = when (aspect) {
+            com.visor.tv.data.Aspect.FIT -> AspectRatioFrameLayout.RESIZE_MODE_FIT
+            com.visor.tv.data.Aspect.FILL -> AspectRatioFrameLayout.RESIZE_MODE_FILL
+            com.visor.tv.data.Aspect.ZOOM -> AspectRatioFrameLayout.RESIZE_MODE_ZOOM
+        }
         AndroidView(
             modifier = modifier,
+            update = { it.resizeMode = mode },
             factory = { ctx ->
                 PlayerView(ctx).apply {
                     layoutParams = ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT)

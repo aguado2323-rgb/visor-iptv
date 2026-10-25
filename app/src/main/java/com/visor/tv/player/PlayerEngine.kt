@@ -23,6 +23,8 @@ interface PlayerEngine {
     /** null desactiva los subtítulos. */
     fun selectSubtitle(id: String?)
     fun release()
+    /** Formato de imagen (ajustar, rellenar, zoom). */
+    fun setAspect(a: com.visor.tv.data.Aspect)
 
     @Composable
     fun VideoSurface(modifier: Modifier)

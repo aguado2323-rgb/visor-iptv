@@ -7,6 +7,8 @@ import androidx.compose.runtime.setValue
 
 enum class ThemeMode(val label: String) { LIGHT("Claro"), OLED("Negro OLED") }
 enum class Engine(val label: String) { EXO("ExoPlayer"), VLC("VLC") }
+/** Cómo encaja la imagen en la pantalla: entera con bandas, estirada o recortada para llenar. */
+enum class Aspect(val label: String) { FIT("Ajustar"), FILL("Rellenar"), ZOOM("Zoom") }
 enum class LiveFormat(val label: String, val ext: String) { TS("MPEG-TS", "ts"), HLS("HLS", "m3u8") }
 enum class ArtSource(val label: String) { PROVIDER("Proveedor"), TMDB("TMDB") }
 enum class AudioLang(val label: String, val code: String?) { ES("Español", "es"), EN("Inglés", "en"), ORIGINAL("Original", null) }
@@ -32,6 +34,8 @@ class Settings(context: Context) {
         private set
     /** Reproductor para películas, series y grabaciones. Si nunca se ha elegido, empieza igual que el de directo. */
     var vodEngine by mutableStateOf(load("vodEngine", engine))
+        private set
+    var aspect by mutableStateOf(load("aspect", Aspect.FIT))
         private set
     var liveFormat by mutableStateOf(load("liveFormat", LiveFormat.TS))
         private set
@@ -63,6 +67,7 @@ class Settings(context: Context) {
 
     fun updateTheme(v: ThemeMode) { theme = v; p.edit().putString("theme", v.name).apply() }
     fun updateEngine(v: Engine) { engine = v; p.edit().putString("engine", v.name).apply() }
+    fun updateAspect(v: Aspect) { aspect = v; p.edit().putString("aspect", v.name).apply() }
     fun updateVodEngine(v: Engine) { vodEngine = v; p.edit().putString("vodEngine", v.name).apply() }
     fun engineFor(kind: String): Engine = if (kind == "live") engine else vodEngine
     fun updateLiveFormat(v: LiveFormat) { liveFormat = v; p.edit().putString("liveFormat", v.name).apply() }

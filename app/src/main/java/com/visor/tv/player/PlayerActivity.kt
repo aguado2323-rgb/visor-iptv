@@ -60,6 +60,7 @@ import androidx.compose.ui.text.font.FontWeight
 import com.visor.tv.VisorApp
 import com.visor.tv.data.EpgEntry
 import com.visor.tv.data.Engine
+import com.visor.tv.data.next
 import com.visor.tv.data.FavItem
 import com.visor.tv.data.PlayItem
 import com.visor.tv.ui.LocalPalette
@@ -121,7 +122,8 @@ private fun PlayerScreen(app: VisorApp, onExit: () -> Unit) {
     val engine: PlayerEngine = remember(engineType) {
         val audio = app.settings.audioLang.code
         val subs = app.settings.subsDefault.code
-        if (engineType == Engine.VLC) VlcEngine(ctx, audio, subs) else ExoEngine(ctx, app.http, audio, subs)
+        (if (engineType == Engine.VLC) VlcEngine(ctx, audio, subs) else ExoEngine(ctx, app.http, audio, subs))
+            .also { it.setAspect(app.settings.aspect) }
     }
 
     fun saveProgress() {
@@ -290,6 +292,12 @@ private fun PlayerScreen(app: VisorApp, onExit: () -> Unit) {
                         TvButton("+30 s", onClick = { engine.seekBy(30_000) })
                     }
                     TvButton("Audio y subtítulos", onClick = { panel = !panel; tracksVersion++ })
+                    // Ajustar → Rellenar → Zoom; se recuerda para la próxima vez
+                    TvButton("Imagen: ${app.settings.aspect.label}", onClick = {
+                        val next = app.settings.aspect.next()
+                        app.settings.updateAspect(next)
+                        engine.setAspect(next)
+                    })
                     if (isLive) {
                         if (rec == null) TvButton("Grabar", dot = p.rec, onClick = { startManualRecording(app, item.id, item.title, epgNow) })
                         else TvButton("Detener grabación", dot = p.rec, onClick = { app.recordings.cancel(rec.id) })

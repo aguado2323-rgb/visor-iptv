@@ -51,6 +51,7 @@ object MiniPlayer {
         val subs = app.settings.subsDefault.code
         val e = if (engineType == Engine.VLC) VlcEngine(app, audio, subs) else ExoEngine(app, app.http, audio, subs)
         e.onError = { msg -> error = msg }
+        e.setAspect(app.settings.aspect)
         try {
             e.prepare(app.repo.urlFor(it, app.settings.liveFormat.ext), 0, true)
         } catch (ex: Exception) {
@@ -73,6 +74,7 @@ object MiniPlayer {
     fun expand(ctx: Context) {
         if (item == null) return
         stop()
+        VisorApp.instance.internalNav = true
         ctx.startActivity(Intent(ctx, PlayerActivity::class.java))
     }
 }

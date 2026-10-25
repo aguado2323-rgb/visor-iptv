@@ -22,6 +22,7 @@ Most IPTV apps on Fire TV are cluttered and slow. Visor focuses on what you use 
 ## Features
 
 ### Home
+- **Continue watching:** movies you left halfway and, for each series, the episode in progress or the next one. **OK** resumes at the exact second; **☰ Menu** opens the detail page or removes it from the row.
 - **New movies showcase:** a large card with backdrop, synopsis, year, genre and rating. It rotates on its own; press **← →** to browse, **OK** to open.
 - **New series shelf:** the latest series with cover and description.
 - The layout is sized to the screen, so nothing is cut off on a 16:9 TV.
@@ -29,7 +30,9 @@ Most IPTV apps on Fire TV are cluttered and slow. Visor focuses on what you use 
 ### Live TV
 - Channels grouped in your provider's folders, with what's on now from the EPG.
 - **Channel guide inside the player:** press **OK** or **←** while watching. It has two tabs, *This folder* and *Recent* (your last 15 channels), with progress bars and what's on next. **↑ ↓** zaps directly.
-- **3-hour guide grid** with a "now" line. Press OK on a future show to record it once, daily or weekly.
+- **Full guide:** Visor downloads your provider's complete XMLTV guide once a day, so the grid covers up to 4 days ahead (and the last 6 hours). Move by 2 hours or by day, or with **⏪ ⏩** on the remote. Press OK on a show to watch it if it's on, or to record it once, daily or weekly.
+- **Search the guide** by show name across all your channels ("when is the match on?").
+- Channels without guide data can still be browsed and played from the grid. If your provider has no XMLTV guide, Visor falls back to the short per-channel guide.
 - Favorite channels with **☰ Menu** on any channel.
 
 ### Movies and series
@@ -47,12 +50,14 @@ Most IPTV apps on Fire TV are cluttered and slow. Visor focuses on what you use 
 - **Audio and subtitles panel** with every track the stream carries.
 - **Scrubbable timeline:** hold **→** and the step grows (10 s → 30 s → 1 min → 5 min). Release to jump there.
 - **Next episode** card with a 10-second countdown during the credits.
+- **Picture format:** fit, fill or zoom, for 4:3 channels or streams with black bars. Remembered for next time.
 
 ### Recording
 - One-press **REC** while watching, from the guide, or with a **new timer**: pick any channel, then a show from its guide or exact hours, once, daily, weekdays or weekly, with start and end margins.
 - Choose where each recording is saved: internal storage or a USB drive. Each recording uses one extra connection to your provider.
 
 ### Everything else
+- **Manage folders** for TV, movies and series: hide the ones you never use, reorder them, or lock them with the PIN. From **☰ Menu** on any folder, or all at once in *Settings → Folders*. Hidden and locked folders stay out of search, *Latest* and Home; locked ones close again when you leave the app.
 - **Automatic list refresh** every 6 h, 12 h or 24 h, plus *Refresh now*.
 - **In-app updates:** when a new release is published here, Visor offers it on launch and installs it with one click.
 - **Backup and restore** of favorites, progress, recent channels, settings and scheduled recordings.

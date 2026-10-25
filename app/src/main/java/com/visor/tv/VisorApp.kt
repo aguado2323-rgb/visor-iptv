@@ -41,6 +41,12 @@ class VisorApp : Application(), ImageLoaderFactory {
         private set
     lateinit var recents: com.visor.tv.data.RecentChannels
         private set
+    lateinit var folders: com.visor.tv.data.Folders
+        private set
+    lateinit var epg: com.visor.tv.data.EpgStore
+        private set
+    /** La app abre una pantalla suya (reproductor): no cuenta como salir para volver a bloquear carpetas. */
+    @Volatile var internalNav = false
     val queue = PlaybackQueue()
 
     override fun onCreate() {
@@ -66,6 +72,8 @@ class VisorApp : Application(), ImageLoaderFactory {
         tmdb = Tmdb(http)
         updater = com.visor.tv.data.Updater(this, http)
         recents = com.visor.tv.data.RecentChannels(this)
+        folders = com.visor.tv.data.Folders(this)
+        epg = com.visor.tv.data.EpgStore(this, http)
         createChannels()
     }
 

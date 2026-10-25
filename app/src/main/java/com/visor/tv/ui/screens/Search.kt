@@ -61,11 +61,16 @@ fun <R> SearchPanel(
     source: suspend () -> List<R>,
     name: (R) -> String,
     content: @Composable (List<R>) -> Unit,
+    /** Si se indica, en vez de filtrar [source] en el aparato se consulta esto con lo escrito (p. ej. la guía). */
+    remote: (suspend (String) -> List<R>)? = null,
+    /** Texto de ayuda antes de escribir, en el modo [remote]. */
+    remoteHint: String = "",
 ) {
     val p = LocalPalette.current
     var field by remember { mutableStateOf(TextFieldValue("")) }
     val query = field.text
-    val all = load(com.visor.tv.VisorApp.instance.repo.version) { withContext(Dispatchers.IO) { source().map { normalize(name(it)) to it } } }
+    val all: Load<List<Pair<String, R>>> = if (remote != null) Load.Ok(emptyList()) else
+        load(com.visor.tv.VisorApp.instance.repo.version) { withContext(Dispatchers.IO) { source().map { normalize(name(it)) to it } } }
     val keyboard = LocalSoftwareKeyboardController.current
     val focus = LocalFocusManager.current
     val fieldFocus = remember { FocusRequester() }
@@ -119,14 +124,14 @@ fun <R> SearchPanel(
             val results by produceState<List<R>?>(null, query, indexed) {
                 val words = normalize(query).split(' ').filter { it.isNotBlank() }
                 if (words.isEmpty() || query.trim().length < 2) { value = null; return@produceState }
-                delay(150) // espera a que termine de escribir
-                value = withContext(Dispatchers.Default) {
+                delay(if (remote != null) 350 else 150) // espera a que termine de escribir
+                value = if (remote != null) remote(query.trim()) else withContext(Dispatchers.Default) {
                     indexed.asSequence().filter { (n, _) -> words.all { n.contains(it) } }.map { it.second }.take(300).toList()
                 }
             }
             val r = results
             when {
-                r == null -> Empty("Escribe al menos 2 letras. Busca en toda la lista (${indexed.size} títulos), no solo en una carpeta.")
+                r == null -> Empty(if (remote != null) remoteHint else "Escribe al menos 2 letras. Busca en toda la lista (${indexed.size} títulos), no solo en una carpeta.")
                 r.isEmpty() -> Empty("Sin resultados para \"${query.trim()}\".")
                 else -> {
                     T("${r.size}${if (r.size == 300) "+" else ""} resultados · ↓ para recorrerlos, Atrás para volver a escribir", Type.small, p.muted, Modifier.padding(start = 6.dp))

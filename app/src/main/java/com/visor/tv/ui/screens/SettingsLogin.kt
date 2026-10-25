@@ -165,6 +165,8 @@ fun SettingsScreen(app: VisorApp, nav: Nav) {
     val backup = remember { com.visor.tv.data.Backup(app) }
     var toRestore by remember { mutableStateOf<com.visor.tv.data.BackupData?>(null) }
     var msg by remember { mutableStateOf<String?>(null) }
+    var foldersOpen by remember { mutableStateOf(false) }
+    if (foldersOpen) FolderManagerDialog(app) { foldersOpen = false }
 
     if (app.vault.hasPin() && !nav.settingsUnlocked) {
         PinPad("Ajustes protegidos", onDone = { pin ->
@@ -191,6 +193,7 @@ fun SettingsScreen(app: VisorApp, nav: Nav) {
         item { ListRow("Tema", trailing = s.theme.label, onClick = { s.updateTheme(s.theme.next()) }) }
         item { ListRow("Reproductor de TV en directo", subtitle = "Si un canal no va con uno, prueba con el otro", trailing = s.engine.label, onClick = { s.updateEngine(s.engine.next()) }) }
         item { ListRow("Reproductor de películas y series", subtitle = "También para las grabaciones", trailing = s.vodEngine.label, onClick = { s.updateVodEngine(s.vodEngine.next()) }) }
+        item { ListRow("Formato de imagen", subtitle = "Ajustar con bandas, rellenar estirando o zoom recortando. También en el reproductor", trailing = s.aspect.label, onClick = { s.updateAspect(s.aspect.next()) }) }
         item { ListRow("Formato de los canales en directo", trailing = s.liveFormat.label, onClick = { s.updateLiveFormat(s.liveFormat.next()) }) }
         item { ListRow("Idioma de audio preferido", trailing = s.audioLang.label, onClick = { s.updateAudio(s.audioLang.next()) }) }
         item { ListRow("Subtítulos al empezar", trailing = s.subsDefault.label, onClick = { s.updateSubs(s.subsDefault.next()) }) }
@@ -231,7 +234,43 @@ fun SettingsScreen(app: VisorApp, nav: Nav) {
         }
         if (app.vault.hasPin()) {
             item { ListRow("Pedir PIN al abrir la app", trailing = if (s.pinOnStart) "Sí" else "No", onClick = { s.updatePinOnStart(!s.pinOnStart) }) }
-            item { ListRow("Quitar PIN", onClick = { app.vault.setPin(null); s.updatePinOnStart(false); msg = "PIN eliminado" }) }
+            item {
+                ListRow("Quitar PIN", subtitle = "También quita el bloqueo de las carpetas", onClick = {
+                    app.vault.setPin(null); s.updatePinOnStart(false); app.folders.clearLocks(); msg = "PIN eliminado"
+                })
+            }
+        }
+        item {
+            val f = app.folders
+            f.version
+            val hidden = com.visor.tv.data.Folders.TYPES.sumOf { f.hidden(it).size }
+            val locked = com.visor.tv.data.Folders.TYPES.sumOf { f.locked(it).size }
+            ListRow(
+                "Carpetas",
+                subtitle = "Ocultar, ordenar o bloquear con PIN las carpetas de TV, películas y series",
+                trailing = listOfNotNull(
+                    hidden.takeIf { it > 0 }?.let { "$it ocultas" },
+                    locked.takeIf { it > 0 }?.let { "$it con PIN" },
+                ).joinToString(" · ").ifBlank { "Todas visibles" },
+                onClick = { foldersOpen = true },
+            )
+        }
+        item {
+            val e = app.epg
+            e.version
+            val last = e.lastUpdate
+            ListRow(
+                "Guía completa",
+                subtitle = when {
+                    e.updating -> "Descargando… puede tardar un minuto"
+                    e.status != null -> e.status
+                    e.ready -> "${e.programmes} programas · actualizada " +
+                        SimpleDateFormat("d MMM, HH:mm", Locale("es")).format(Date(last)) + " · se renueva sola cada 12 h"
+                    else -> "Varios días de programación y búsqueda de programas. Pulsa para descargarla"
+                },
+                trailing = if (e.updating) "…" else "Actualizar",
+                onClick = { if (!e.updating) scope.launch { e.refresh(app.repo) } },
+            )
         }
         item { ListRow("Actualizar la lista automáticamente", subtitle = "Canales, películas y series nuevas del proveedor", trailing = s.refreshEvery.label, onClick = { s.updateRefresh(s.refreshEvery.next()) }) }
         item {
