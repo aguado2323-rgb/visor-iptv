@@ -26,6 +26,7 @@ data class VodStream(
     val rating: String,
     val ext: String,
     val categoryId: String,
+    val added: Long = 0,
 )
 
 data class SeriesItem(
@@ -35,6 +36,7 @@ data class SeriesItem(
     val rating: String,
     val plot: String,
     val categoryId: String,
+    val updated: Long = 0,
 )
 
 data class VodInfo(

@@ -49,18 +49,24 @@ fun LiveScreen(app: VisorApp) {
 
     Row(Modifier.fillMaxSize(), horizontalArrangement = Arrangement.spacedBy(28.dp)) {
         LoadView(cats) { list ->
-            FolderColumn(listOf(Category(FAV_FOLDER, "★ Favoritos")) + list, selected, { selected = it })
-        }
-        val streams = load(selected, app.favorites.items.size) {
-            if (selected == FAV_FOLDER) app.favorites.of("live").map { it.toLive() } else app.repo.liveStreams(selected)
+            FolderColumn(fixedFolders(withNew = false) + list, selected, { selected = it })
         }
         Column(Modifier.weight(1f)) {
-            T("OK para ver · ≡ Menú para favoritos y grabar", Type.small, LocalPalette.current.muted, Modifier.padding(start = 12.dp, bottom = 6.dp))
-            LoadView(streams) { list ->
-                if (list.isEmpty()) {
-                    Empty(if (selected == FAV_FOLDER) "Aún no tienes canales favoritos. Pulsa ≡ sobre un canal para añadirlo." else "Esta carpeta está vacía.")
-                } else {
-                    ChannelList(app, list, onMenu = { menuFor = it })
+            if (selected == SEARCH_FOLDER) {
+                SearchPanel("Buscar canal", { app.repo.allLive() }, { it.name }) { found ->
+                    ChannelList(app, found, onMenu = { menuFor = it })
+                }
+            } else {
+                val streams = load(selected, app.favorites.items.size) {
+                    if (selected == FAV_FOLDER) app.favorites.of("live").map { it.toLive() } else app.repo.liveStreams(selected)
+                }
+                T("OK para ver · ≡ Menú para favoritos y grabar", Type.small, LocalPalette.current.muted, Modifier.padding(start = 12.dp, bottom = 6.dp))
+                LoadView(streams) { list ->
+                    if (list.isEmpty()) {
+                        Empty(if (selected == FAV_FOLDER) "Aún no tienes canales favoritos. Pulsa ≡ sobre un canal para añadirlo." else "Esta carpeta está vacía.")
+                    } else {
+                        ChannelList(app, list, onMenu = { menuFor = it })
+                    }
                 }
             }
         }

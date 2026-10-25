@@ -69,18 +69,28 @@ fun MoviesScreen(app: VisorApp, nav: Nav) {
     var selected by rememberSaveable { mutableStateOf<String?>(null) }
     Row(Modifier.fillMaxSize(), horizontalArrangement = Arrangement.spacedBy(28.dp)) {
         LoadView(cats) { list ->
-            val all = listOf(Category(FAV_FOLDER, "★ Favoritos")) + list
-            if (selected == null) selected = list.firstOrNull()?.id ?: FAV_FOLDER
-            FolderColumn(all, selected, { selected = it })
+            if (selected == null) selected = NEW_FOLDER
+            FolderColumn(fixedFolders(withNew = true) + list, selected, { selected = it })
         }
         val sel = selected
-        if (sel != null) {
-            val items = load(sel, app.favorites.items.size) {
-                if (sel == FAV_FOLDER) app.favorites.of("vod").map { it.toVod() } else app.repo.vodStreams(sel)
-            }
-            LoadView(items, Modifier.weight(1f)) { list ->
-                if (list.isEmpty()) Empty("No hay películas aquí. Pulsa ≡ sobre una película para añadirla a favoritos.")
-                else MovieGrid(app, nav, list)
+        Column(Modifier.weight(1f)) {
+            when (sel) {
+                null -> {}
+                SEARCH_FOLDER -> SearchPanel("Buscar película", { app.repo.allVod() }, { it.name }) { found -> MovieGrid(app, nav, found) }
+                else -> {
+                    val items = load(sel, app.favorites.items.size) {
+                        when (sel) {
+                            FAV_FOLDER -> app.favorites.of("vod").map { it.toVod() }
+                            NEW_FOLDER -> app.repo.latestVod(30)
+                            else -> app.repo.vodStreams(sel)
+                        }
+                    }
+                    if (sel == NEW_FOLDER) T("Las 30 últimas películas añadidas a tu lista", Type.small, LocalPalette.current.muted, Modifier.padding(start = 6.dp, bottom = 8.dp))
+                    LoadView(items) { list ->
+                        if (list.isEmpty()) Empty("No hay películas aquí. Pulsa ≡ sobre una película para añadirla a favoritos.")
+                        else MovieGrid(app, nav, list)
+                    }
+                }
             }
         }
     }
@@ -170,17 +180,28 @@ fun SeriesScreen(app: VisorApp, nav: Nav) {
     var selected by rememberSaveable { mutableStateOf<String?>(null) }
     Row(Modifier.fillMaxSize(), horizontalArrangement = Arrangement.spacedBy(28.dp)) {
         LoadView(cats) { list ->
-            if (selected == null) selected = list.firstOrNull()?.id ?: FAV_FOLDER
-            FolderColumn(listOf(Category(FAV_FOLDER, "★ Favoritos")) + list, selected, { selected = it })
+            if (selected == null) selected = NEW_FOLDER
+            FolderColumn(fixedFolders(withNew = true) + list, selected, { selected = it })
         }
         val sel = selected
-        if (sel != null) {
-            val items = load(sel, app.favorites.items.size) {
-                if (sel == FAV_FOLDER) app.favorites.of("series").map { it.toSeries() } else app.repo.series(sel)
-            }
-            LoadView(items, Modifier.weight(1f)) { list ->
-                if (list.isEmpty()) Empty("No hay series aquí. Pulsa ≡ sobre una serie para añadirla a favoritos.")
-                else SeriesGrid(app, nav, list)
+        Column(Modifier.weight(1f)) {
+            when (sel) {
+                null -> {}
+                SEARCH_FOLDER -> SearchPanel("Buscar serie", { app.repo.allSeries() }, { it.name }) { found -> SeriesGrid(app, nav, found) }
+                else -> {
+                    val items = load(sel, app.favorites.items.size) {
+                        when (sel) {
+                            FAV_FOLDER -> app.favorites.of("series").map { it.toSeries() }
+                            NEW_FOLDER -> app.repo.latestSeries(30)
+                            else -> app.repo.series(sel)
+                        }
+                    }
+                    if (sel == NEW_FOLDER) T("Las 30 series añadidas o actualizadas más recientemente", Type.small, LocalPalette.current.muted, Modifier.padding(start = 6.dp, bottom = 8.dp))
+                    LoadView(items) { list ->
+                        if (list.isEmpty()) Empty("No hay series aquí. Pulsa ≡ sobre una serie para añadirla a favoritos.")
+                        else SeriesGrid(app, nav, list)
+                    }
+                }
             }
         }
     }

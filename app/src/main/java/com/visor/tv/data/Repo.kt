@@ -125,22 +125,49 @@ class Repo(private val ctx: Context, private val http: OkHttpClient, private val
     suspend fun vodCategories(): List<Category> = memo("vc") { categories(cached("&action=get_vod_categories", TTL_LIST)) }
     suspend fun seriesCategories(): List<Category> = memo("sc") { categories(cached("&action=get_series_categories", TTL_LIST)) }
 
+    private fun parseLive(el: JsonElement) = el.asArr().mapNotNull { it.asObj() }.map {
+        LiveStream(it.i("stream_id"), it.i("num"), it.s("name"), it.s("stream_icon"), it.s("category_id"), it.s("epg_channel_id"))
+    }
+
+    private fun parseVod(el: JsonElement) = el.asArr().mapNotNull { it.asObj() }.map {
+        VodStream(it.i("stream_id"), it.s("name"), it.s("stream_icon"), it.s("rating"),
+            it.s("container_extension").ifBlank { "mp4" }, it.s("category_id"), it.l("added"))
+    }
+
+    private fun parseSeries(el: JsonElement) = el.asArr().mapNotNull { it.asObj() }.map {
+        SeriesItem(it.i("series_id"), it.s("name"), it.s("cover"), it.s("rating"), it.s("plot"), it.s("category_id"),
+            it.l("last_modified"))
+    }
+
     suspend fun liveStreams(cat: String): List<LiveStream> = memo("ls:$cat") {
-        cached("&action=get_live_streams&category_id=${enc(cat)}", TTL_LIST).asArr().mapNotNull { it.asObj() }.map {
-            LiveStream(it.i("stream_id"), it.i("num"), it.s("name"), it.s("stream_icon"), it.s("category_id"), it.s("epg_channel_id"))
-        }
+        parseLive(cached("&action=get_live_streams&category_id=${enc(cat)}", TTL_LIST))
     }
 
     suspend fun vodStreams(cat: String): List<VodStream> = memo("vs:$cat") {
-        cached("&action=get_vod_streams&category_id=${enc(cat)}", TTL_LIST).asArr().mapNotNull { it.asObj() }.map {
-            VodStream(it.i("stream_id"), it.s("name"), it.s("stream_icon"), it.s("rating"), it.s("container_extension").ifBlank { "mp4" }, it.s("category_id"))
-        }
+        parseVod(cached("&action=get_vod_streams&category_id=${enc(cat)}", TTL_LIST))
     }
 
     suspend fun series(cat: String): List<SeriesItem> = memo("ss:$cat") {
-        cached("&action=get_series&category_id=${enc(cat)}", TTL_LIST).asArr().mapNotNull { it.asObj() }.map {
-            SeriesItem(it.i("series_id"), it.s("name"), it.s("cover"), it.s("rating"), it.s("plot"), it.s("category_id"))
-        }
+        parseSeries(cached("&action=get_series&category_id=${enc(cat)}", TTL_LIST))
+    }
+
+    // Listas completas, para el buscador y las novedades. Se descargan una vez y quedan en caché.
+    suspend fun allLive(): List<LiveStream> = memo("ls:*") { parseLive(cached("&action=get_live_streams", TTL_LIST)) }
+    suspend fun allVod(): List<VodStream> = memo("vs:*") { parseVod(cached("&action=get_vod_streams", TTL_LIST)) }
+    suspend fun allSeries(): List<SeriesItem> = memo("ss:*") { parseSeries(cached("&action=get_series", TTL_LIST)) }
+
+    /** Las [n] películas añadidas más recientemente a la lista. */
+    suspend fun latestVod(n: Int = 30): List<VodStream> = memo("vs:new") {
+        val all = allVod()
+        if (all.any { it.added > 0 }) all.sortedByDescending { it.added }.take(n)
+        else all.sortedByDescending { it.id }.take(n) // sin fecha: el id suele crecer con cada alta
+    }
+
+    /** Las [n] series nuevas o actualizadas más recientemente. */
+    suspend fun latestSeries(n: Int = 30): List<SeriesItem> = memo("ss:new") {
+        val all = allSeries()
+        if (all.any { it.updated > 0 }) all.sortedByDescending { it.updated }.take(n)
+        else all.sortedByDescending { it.id }.take(n)
     }
 
     // ---------------- Fichas ----------------
