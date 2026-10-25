@@ -137,7 +137,8 @@ private fun MoviesShowcaseBody(app: VisorApp, nav: Nav, list: List<VodStream>, h
     val plotLines = when { heroH >= 230.dp -> 5; heroH >= 180.dp -> 4; heroH >= 130.dp -> 3; else -> 2 }
 
     Focusable(
-        onClick = { nav.push(Route.Movie(v)) },
+        onClick = { nav.open(Route.Movie(v), "home:hero") },
+        focusRequester = rememberReturnFocus(nav, "home:hero"),
         onMenu = { app.favorites.toggle(v.toFav()) },
         onFocused = { heroFocused = true },
         shape = RoundedCornerShape(18.dp),
@@ -208,7 +209,8 @@ private fun SeriesShelf(app: VisorApp, nav: Nav, list: List<SeriesItem>, cardH: 
     ) {
         itemsIndexed(list, key = { _, s -> s.id }) { _, s ->
             Focusable(
-                onClick = { nav.push(Route.Show(s)) },
+                onClick = { nav.open(Route.Show(s), "home:series:${s.id}") },
+                focusRequester = rememberReturnFocus(nav, "home:series:${s.id}"),
                 onMenu = { app.favorites.toggle(s.toFav()) },
                 shape = RoundedCornerShape(14.dp),
                 scaleOnFocus = true,

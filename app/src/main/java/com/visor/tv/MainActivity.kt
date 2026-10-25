@@ -27,6 +27,7 @@ import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveableStateHolder
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -76,7 +77,10 @@ class Nav {
     val stack = mutableStateListOf<Route>(Route.Tabs)
     var tab by mutableStateOf(Tab.HOME)
     var settingsUnlocked by mutableStateOf(false)
+    /** Elemento del catálogo desde el que se abrió la ficha; al volver, recupera el foco. */
+    var returnKey by mutableStateOf<String?>(null)
     fun push(r: Route) { stack.add(r) }
+    fun open(r: Route, fromKey: String) { returnKey = fromKey; stack.add(r) }
     fun pop(): Boolean = if (stack.size > 1) { stack.removeAt(stack.lastIndex); true } else false
 }
 
@@ -103,6 +107,8 @@ fun play(ctx: Context, list: List<PlayItem>, index: Int) {
 private fun Root(app: VisorApp, onExit: () -> Unit) {
     val p = LocalPalette.current
     val nav = remember { Nav() }
+    // Guarda el estado de las pestañas (carpeta elegida, posición en la cuadrícula…) mientras se ve una ficha
+    val tabsState = rememberSaveableStateHolder()
     var unlocked by remember { mutableStateOf(!(app.settings.pinOnStart && app.vault.hasPin())) }
 
     // Actualización automática de la lista: al abrir la app y luego cada hora comprueba si toca.
@@ -128,7 +134,7 @@ private fun Root(app: VisorApp, onExit: () -> Unit) {
                     }
                 }
                 when (val r = nav.stack.last()) {
-                    Route.Tabs -> TabsScaffold(app, nav)
+                    Route.Tabs -> tabsState.SaveableStateProvider("tabs") { TabsScaffold(app, nav) }
                     is Route.Movie -> MovieDetail(app, r.vod)
                     is Route.Show -> SeriesDetail(app, r.series)
                 }
@@ -145,7 +151,15 @@ private fun TabsScaffold(app: VisorApp, nav: Nav) {
         while (true) { delay(20_000); value = clock() }
     }
     var tabsFocused by remember { mutableStateOf(true) }
-    LaunchedEffect(Unit) { try { firstTab.requestFocus() } catch (_: Exception) { } }
+    // Al volver de una ficha, el foco lo recupera el elemento del catálogo; si no, va a las pestañas.
+    LaunchedEffect(Unit) {
+        if (nav.returnKey != null) {
+            delay(1500) // si el elemento ya no está (lista actualizada…), el foco vuelve a las pestañas
+            if (nav.returnKey == null) return@LaunchedEffect
+            nav.returnKey = null
+        }
+        try { firstTab.requestFocus() } catch (_: Exception) { }
+    }
     // Atrás desde el contenido sube primero a la barra de pestañas; desde ahí, a Inicio y luego sale.
     BackHandler(enabled = !tabsFocused) {
         try { firstTab.requestFocus() } catch (_: Exception) { }

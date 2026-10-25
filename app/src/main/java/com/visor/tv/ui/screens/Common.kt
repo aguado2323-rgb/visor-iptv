@@ -16,6 +16,8 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
@@ -113,4 +115,54 @@ fun ActionsDialog(title: String, actions: List<Pair<String, () -> Unit>>, onDism
         }
     }
     LaunchedEffect(Unit) { try { first.requestFocus() } catch (_: Exception) { } }
+}
+
+/**
+ * FocusRequester para un elemento del catálogo. Si es el elemento desde el que se abrió la ficha,
+ * recupera el foco al volver, para seguir navegando desde el mismo sitio.
+ */
+@Composable
+fun rememberReturnFocus(nav: com.visor.tv.Nav, key: String): FocusRequester {
+    val fr = remember { FocusRequester() }
+    if (nav.returnKey == key) {
+        LaunchedEffect(Unit) {
+            kotlinx.coroutines.delay(60)
+            try { fr.requestFocus() } catch (_: Exception) { }
+            nav.returnKey = null
+        }
+    }
+    return fr
+}
+
+fun List<com.visor.tv.data.VodStream>.sortedFor(s: com.visor.tv.data.SortBy) = when (s) {
+    com.visor.tv.data.SortBy.NEWEST -> sortedWith(compareByDescending<com.visor.tv.data.VodStream> { it.added }.thenByDescending { it.id })
+    com.visor.tv.data.SortBy.OLDEST -> sortedWith(compareBy<com.visor.tv.data.VodStream> { it.added }.thenBy { it.id })
+    com.visor.tv.data.SortBy.YEAR_DESC -> sortedWith(compareByDescending<com.visor.tv.data.VodStream> { it.year }.thenByDescending { it.added })
+    com.visor.tv.data.SortBy.YEAR_ASC -> sortedWith(compareBy<com.visor.tv.data.VodStream> { if (it.year == 0) Int.MAX_VALUE else it.year }.thenBy { it.added })
+    com.visor.tv.data.SortBy.AZ -> sortedBy { normalize(it.name) }
+    com.visor.tv.data.SortBy.ZA -> sortedByDescending { normalize(it.name) }
+}
+
+@JvmName("sortedSeries")
+fun List<com.visor.tv.data.SeriesItem>.sortedFor(s: com.visor.tv.data.SortBy) = when (s) {
+    com.visor.tv.data.SortBy.NEWEST -> sortedWith(compareByDescending<com.visor.tv.data.SeriesItem> { it.updated }.thenByDescending { it.id })
+    com.visor.tv.data.SortBy.OLDEST -> sortedWith(compareBy<com.visor.tv.data.SeriesItem> { it.updated }.thenBy { it.id })
+    com.visor.tv.data.SortBy.YEAR_DESC -> sortedWith(compareByDescending<com.visor.tv.data.SeriesItem> { it.year }.thenByDescending { it.updated })
+    com.visor.tv.data.SortBy.YEAR_ASC -> sortedWith(compareBy<com.visor.tv.data.SeriesItem> { if (it.year == 0) Int.MAX_VALUE else it.year }.thenBy { it.updated })
+    com.visor.tv.data.SortBy.AZ -> sortedBy { normalize(it.name) }
+    com.visor.tv.data.SortBy.ZA -> sortedByDescending { normalize(it.name) }
+}
+
+/** Botón "Ordenar: …" que abre la lista de órdenes posibles. */
+@Composable
+fun SortButton(current: com.visor.tv.data.SortBy, onPick: (com.visor.tv.data.SortBy) -> Unit) {
+    var open by remember { androidx.compose.runtime.mutableStateOf(false) }
+    TvButton("Ordenar: ${current.label}  ▾", onClick = { open = true })
+    if (open) {
+        ActionsDialog(
+            "Ordenar por",
+            com.visor.tv.data.SortBy.entries.map { o -> ((if (o == current) "✓ " else "") + o.label) to { onPick(o) } },
+            onDismiss = { open = false },
+        )
+    }
 }

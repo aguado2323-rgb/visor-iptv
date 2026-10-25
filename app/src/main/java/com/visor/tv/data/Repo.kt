@@ -173,12 +173,12 @@ class Repo(private val ctx: Context, private val http: OkHttpClient, private val
 
     private fun parseVod(el: JsonElement) = el.asArr().mapNotNull { it.asObj() }.map {
         VodStream(it.i("stream_id"), it.s("name"), it.s("stream_icon"), it.s("rating"),
-            it.s("container_extension").ifBlank { "mp4" }, it.s("category_id"), it.l("added"))
+            it.s("container_extension").ifBlank { "mp4" }, it.s("category_id"), it.l("added"), it.year(it.s("name")))
     }
 
     private fun parseSeries(el: JsonElement) = el.asArr().mapNotNull { it.asObj() }.map {
         SeriesItem(it.i("series_id"), it.s("name"), it.s("cover"), it.s("rating"), it.s("plot"), it.s("category_id"),
-            it.l("last_modified"))
+            it.l("last_modified"), it.year(it.s("name")))
     }
 
     suspend fun liveStreams(cat: String): List<LiveStream> = memo("ls:$cat") {

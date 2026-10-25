@@ -11,6 +11,11 @@ enum class LiveFormat(val label: String, val ext: String) { TS("MPEG-TS", "ts"),
 enum class ArtSource(val label: String) { PROVIDER("Proveedor"), TMDB("TMDB") }
 enum class AudioLang(val label: String, val code: String?) { ES("Español", "es"), EN("Inglés", "en"), ORIGINAL("Original", null) }
 enum class RefreshEvery(val label: String, val hours: Int) { OFF("Nunca", 0), H6("Cada 6 horas", 6), H12("Cada 12 horas", 12), H24("Cada día", 24) }
+enum class SortBy(val label: String) {
+    NEWEST("Añadidas recientemente"), OLDEST("Añadidas hace más tiempo"),
+    YEAR_DESC("Año: más nuevas"), YEAR_ASC("Año: más antiguas"),
+    AZ("Alfabético A–Z"), ZA("Alfabético Z–A"),
+}
 enum class SubsDefault(val label: String, val code: String?) { OFF("Desactivados", null), ES("Español", "es"), EN("Inglés", "en") }
 
 /** Ajustes no sensibles. Son estado de Compose, así que la interfaz se actualiza al cambiarlos. */
@@ -42,6 +47,13 @@ class Settings(context: Context) {
         private set
     var refreshEvery by mutableStateOf(load("refresh", RefreshEvery.H12))
         private set
+
+    var vodSort by mutableStateOf(load("vodSort", SortBy.NEWEST))
+        private set
+    var seriesSort by mutableStateOf(load("seriesSort", SortBy.NEWEST))
+        private set
+    fun updateVodSort(v: SortBy) { vodSort = v; p.edit().putString("vodSort", v.name).apply() }
+    fun updateSeriesSort(v: SortBy) { seriesSort = v; p.edit().putString("seriesSort", v.name).apply() }
 
     fun updateRefresh(v: RefreshEvery) { refreshEvery = v; p.edit().putString("refresh", v.name).apply() }
 

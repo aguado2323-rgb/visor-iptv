@@ -91,9 +91,11 @@ fun MoviesScreen(app: VisorApp, nav: Nav) {
                         }
                     }
                     if (sel == NEW_FOLDER) T("Las 30 últimas películas añadidas a tu lista", Type.small, LocalPalette.current.muted, Modifier.padding(start = 6.dp, bottom = 8.dp))
+                    else Row(Modifier.padding(start = 6.dp, bottom = 10.dp)) { SortButton(app.settings.vodSort) { app.settings.updateVodSort(it) } }
                     LoadView(items) { list ->
-                        if (list.isEmpty()) Empty("No hay películas aquí. Pulsa ≡ sobre una película para añadirla a favoritos.")
-                        else MovieGrid(app, nav, list)
+                        val sorted = remember(list, app.settings.vodSort, sel) { if (sel == NEW_FOLDER) list else list.sortedFor(app.settings.vodSort) }
+                        if (sorted.isEmpty()) Empty("No hay películas aquí. Pulsa ≡ sobre una película para añadirla a favoritos.")
+                        else MovieGrid(app, nav, sorted)
                     }
                 }
             }
@@ -110,12 +112,18 @@ fun MovieGrid(app: VisorApp, nav: Nav, list: List<VodStream>) {
         contentPadding = PaddingValues(6.dp),
     ) {
         items(list, key = { it.id }) { v ->
+            val key = "vod:${v.id}"
             Poster(
                 url = v.icon,
                 title = v.name,
-                subtitle = (if (app.favorites.contains("vod", v.id)) "★ Favorita  " else "") + (rating(v.rating) ?: ""),
-                onClick = { nav.push(Route.Movie(v)) },
+                subtitle = listOfNotNull(
+                    if (app.favorites.contains("vod", v.id)) "★" else null,
+                    v.year.takeIf { it > 0 }?.toString(),
+                    rating(v.rating),
+                ).joinToString("  "),
+                onClick = { nav.open(Route.Movie(v), key) },
                 onMenu = { app.favorites.toggle(v.toFav()) },
+                focusRequester = rememberReturnFocus(nav, key),
             )
         }
     }
@@ -215,9 +223,11 @@ fun SeriesScreen(app: VisorApp, nav: Nav) {
                         }
                     }
                     if (sel == NEW_FOLDER) T("Las 30 series añadidas o actualizadas más recientemente", Type.small, LocalPalette.current.muted, Modifier.padding(start = 6.dp, bottom = 8.dp))
+                    else Row(Modifier.padding(start = 6.dp, bottom = 10.dp)) { SortButton(app.settings.seriesSort) { app.settings.updateSeriesSort(it) } }
                     LoadView(items) { list ->
-                        if (list.isEmpty()) Empty("No hay series aquí. Pulsa ≡ sobre una serie para añadirla a favoritos.")
-                        else SeriesGrid(app, nav, list)
+                        val sorted = remember(list, app.settings.seriesSort, sel) { if (sel == NEW_FOLDER) list else list.sortedFor(app.settings.seriesSort) }
+                        if (sorted.isEmpty()) Empty("No hay series aquí. Pulsa ≡ sobre una serie para añadirla a favoritos.")
+                        else SeriesGrid(app, nav, sorted)
                     }
                 }
             }
@@ -234,12 +244,18 @@ fun SeriesGrid(app: VisorApp, nav: Nav, list: List<SeriesItem>) {
         contentPadding = PaddingValues(6.dp),
     ) {
         items(list, key = { it.id }) { s ->
+            val key = "series:${s.id}"
             Poster(
                 url = s.cover,
                 title = s.name,
-                subtitle = (if (app.favorites.contains("series", s.id)) "★ Favorita  " else "") + (rating(s.rating) ?: ""),
-                onClick = { nav.push(Route.Show(s)) },
+                subtitle = listOfNotNull(
+                    if (app.favorites.contains("series", s.id)) "★" else null,
+                    s.year.takeIf { it > 0 }?.toString(),
+                    rating(s.rating),
+                ).joinToString("  "),
+                onClick = { nav.open(Route.Show(s), key) },
                 onMenu = { app.favorites.toggle(s.toFav()) },
+                focusRequester = rememberReturnFocus(nav, key),
             )
         }
     }

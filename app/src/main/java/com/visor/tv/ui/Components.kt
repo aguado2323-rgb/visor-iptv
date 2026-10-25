@@ -198,10 +198,11 @@ fun Poster(
     onMenu: (() -> Unit)? = null,
     onFocused: (() -> Unit)? = null,
     wide: Boolean = false,
+    focusRequester: FocusRequester? = null,
 ) {
     val p = LocalPalette.current
     Column(modifier.width(width), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-        Focusable(onClick = onClick, onMenu = onMenu, onFocused = onFocused, shape = RoundedCornerShape(12.dp), scaleOnFocus = true) { focused ->
+        Focusable(onClick = onClick, onMenu = onMenu, onFocused = onFocused, shape = RoundedCornerShape(12.dp), scaleOnFocus = true, focusRequester = focusRequester) { focused ->
             Box(
                 Modifier
                     .fillMaxWidth()

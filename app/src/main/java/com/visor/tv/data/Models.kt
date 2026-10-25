@@ -27,6 +27,7 @@ data class VodStream(
     val ext: String,
     val categoryId: String,
     val added: Long = 0,
+    val year: Int = 0,
 )
 
 data class SeriesItem(
@@ -37,6 +38,7 @@ data class SeriesItem(
     val plot: String,
     val categoryId: String,
     val updated: Long = 0,
+    val year: Int = 0,
 )
 
 data class VodInfo(
@@ -121,6 +123,17 @@ internal fun JsonObject.s(k: String): String {
 
 internal fun JsonObject.i(k: String): Int = s(k).toDoubleOrNull()?.toInt() ?: 0
 internal fun JsonObject.l(k: String): Long = s(k).toDoubleOrNull()?.toLong() ?: 0L
+
+private val YEAR_IN_NAME = Regex("""(?:\(|\[|-|\s)((?:19|20)\d{2})(?:\)|\]|\s|$)""")
+
+/** Año de estreno: de los campos del proveedor o, si no vienen, del propio título ("Película (2023)"). */
+internal fun JsonObject.year(name: String): Int {
+    for (k in listOf("year", "release_date", "releasedate", "releaseDate")) {
+        val y = s(k).take(4).toIntOrNull()
+        if (y != null && y in 1900..2100) return y
+    }
+    return YEAR_IN_NAME.findAll(name).lastOrNull()?.groupValues?.get(1)?.toIntOrNull() ?: 0
+}
 
 internal fun b64(s: String): String = try {
     String(Base64.decode(s, Base64.DEFAULT), Charsets.UTF_8)
