@@ -85,17 +85,17 @@ class VlcEngine(
         libVlc.release()
     }
 
-        private var aspect = com.visor.tv.data.Aspect.FIT
+        private var aspectMode = com.visor.tv.data.Aspect.FIT
     private var attached = false
     private fun applyAspect() {
         if (!attached) return
-        mp.videoScale = when (aspect) {
+        mp.videoScale = when (aspectMode) {
             com.visor.tv.data.Aspect.FIT -> MediaPlayer.ScaleType.SURFACE_BEST_FIT
             com.visor.tv.data.Aspect.FILL -> MediaPlayer.ScaleType.SURFACE_FILL
             com.visor.tv.data.Aspect.ZOOM -> MediaPlayer.ScaleType.SURFACE_FIT_SCREEN
         }
     }
-    override fun setAspect(a: com.visor.tv.data.Aspect) { aspect = a; applyAspect() }
+    override fun setAspect(a: com.visor.tv.data.Aspect) { aspectMode = a; applyAspect() }
 
     @Composable
     override fun VideoSurface(modifier: Modifier) {

@@ -129,12 +129,12 @@ class ExoEngine(
 
     override fun release() = player.release()
 
-        private var aspect by androidx.compose.runtime.mutableStateOf(com.visor.tv.data.Aspect.FIT)
-    override fun setAspect(a: com.visor.tv.data.Aspect) { aspect = a }
+    private var aspectMode by androidx.compose.runtime.mutableStateOf(com.visor.tv.data.Aspect.FIT)
+    override fun setAspect(a: com.visor.tv.data.Aspect) { aspectMode = a }
 
     @Composable
     override fun VideoSurface(modifier: Modifier) {
-        val mode = when (aspect) {
+        val mode = when (aspectMode) {
             com.visor.tv.data.Aspect.FIT -> AspectRatioFrameLayout.RESIZE_MODE_FIT
             com.visor.tv.data.Aspect.FILL -> AspectRatioFrameLayout.RESIZE_MODE_FILL
             com.visor.tv.data.Aspect.ZOOM -> AspectRatioFrameLayout.RESIZE_MODE_ZOOM
