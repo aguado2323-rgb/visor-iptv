@@ -85,8 +85,7 @@ class VlcEngine(
         libVlc.release()
     }
 
-    @Composable
-    private var aspect = com.visor.tv.data.Aspect.FIT
+        private var aspect = com.visor.tv.data.Aspect.FIT
     private var attached = false
     private fun applyAspect() {
         if (!attached) return
@@ -98,6 +97,7 @@ class VlcEngine(
     }
     override fun setAspect(a: com.visor.tv.data.Aspect) { aspect = a; applyAspect() }
 
+    @Composable
     override fun VideoSurface(modifier: Modifier) {
         AndroidView(
             modifier = modifier,

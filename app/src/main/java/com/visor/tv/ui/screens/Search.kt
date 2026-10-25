@@ -60,11 +60,11 @@ fun <R> SearchPanel(
     hint: String,
     source: suspend () -> List<R>,
     name: (R) -> String,
-    content: @Composable (List<R>) -> Unit,
     /** Si se indica, en vez de filtrar [source] en el aparato se consulta esto con lo escrito (p. ej. la guía). */
     remote: (suspend (String) -> List<R>)? = null,
     /** Texto de ayuda antes de escribir, en el modo [remote]. */
     remoteHint: String = "",
+    content: @Composable (List<R>) -> Unit,
 ) {
     val p = LocalPalette.current
     var field by remember { mutableStateOf(TextFieldValue("")) }
