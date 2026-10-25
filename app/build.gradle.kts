@@ -1,3 +1,5 @@
+import java.util.Properties
+
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
@@ -30,7 +32,7 @@ android {
         create("release") {
             // Clave fija del proyecto (repo privado): todas las compilaciones firman igual,
             // así el APK se actualiza encima sin desinstalar ni perder la sesión.
-            val props = java.util.Properties()
+            val props = Properties()
             val pf = file("signing.properties")
             if (pf.exists()) pf.inputStream().use { props.load(it) }
             // GitHub pasa los secretos que no existen como cadena vacía: se tratan como ausentes.
