@@ -2,6 +2,11 @@ package com.visor.tv.ui.screens
 
 import androidx.compose.foundation.background
 import androidx.compose.animation.Crossfade
+import androidx.compose.foundation.border
+import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.ui.unit.Dp
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxHeight
@@ -74,139 +79,135 @@ fun ChannelTile(f: FavItem, onClick: () -> Unit, onMenu: () -> Unit) {
 
 @Composable
 fun HomeScreen(app: VisorApp, nav: Nav) {
-    val p = LocalPalette.current
-    val ctx = LocalContext.current
-    val chans = app.favorites.of("live")
     val movies = load(Unit) { app.repo.latestVod(30) }
     val shows = load(Unit) { app.repo.latestSeries(30) }
-    val active = app.recordings.items.count { it.status == com.visor.tv.record.Recording.STATUS_RECORDING }
 
-    LazyColumn(verticalArrangement = Arrangement.spacedBy(22.dp), contentPadding = PaddingValues(bottom = 28.dp)) {
-        // 1. Canales favoritos
-        item {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    T("Tus canales", Type.h2)
-                    if (active > 0) T("● Grabando $active", Type.small, p.rec)
-                }
-                if (chans.isEmpty()) Empty("Pulsa ≡ (Menú) sobre un canal en TV para tenerlo aquí.")
-                else LazyRow(horizontalArrangement = Arrangement.spacedBy(12.dp), contentPadding = PaddingValues(horizontal = 4.dp, vertical = 6.dp)) {
-                    itemsIndexed(chans, key = { _, f -> f.key }) { i, f ->
-                        ChannelTile(f, onClick = { play(ctx, chans.map { it.toLive().toPlay() }, i) }, onMenu = { app.favorites.toggle(f) })
-                    }
-                }
+    // Todo se dimensiona a partir del alto disponible, para que en una tele 16:9 quepa sin cortarse ni desplazarse.
+    BoxWithConstraints(Modifier.fillMaxSize()) {
+        val fixed = 22.dp + 8.dp + 12.dp + 14.dp + 22.dp + 8.dp + 12.dp + 6.dp // rótulos, separaciones y márgenes de enfoque
+        val flex = (maxHeight - fixed).coerceAtLeast(240.dp)
+        val heroH = flex * 0.44f
+        val posterH = flex * 0.28f
+        val seriesH = flex * 0.28f
+
+        Column(Modifier.fillMaxSize()) {
+            T("Películas nuevas", Type.h2, modifier = Modifier.height(22.dp))
+            Spacer(Modifier.height(8.dp))
+            LoadView(movies) { all ->
+                val list = all.take(20)
+                if (list.isEmpty()) Empty("Tu lista no tiene películas nuevas.")
+                else MoviesShowcaseBody(app, nav, list, heroH, posterH)
             }
-        }
-        // 2. Películas nuevas, en grande y rotando solas
-        item { MoviesShowcase(app, nav, movies) }
-        // 3. Series nuevas, con su descripción
-        item { SeriesShelf(app, nav, shows) }
-    }
-}
-
-/** Escaparate de películas nuevas: ficha grande arriba y fila de pósters debajo. */
-@Composable
-private fun MoviesShowcase(app: VisorApp, nav: Nav, state: Load<List<VodStream>>) {
-    val p = LocalPalette.current
-    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        T("Películas nuevas", Type.h2)
-        LoadView(state) { all ->
-            val list = all.take(20)
-            if (list.isEmpty()) Empty("Tu lista no tiene películas nuevas.") else MoviesShowcaseBody(app, nav, list)
+            Spacer(Modifier.height(14.dp))
+            T("Series nuevas", Type.h2, modifier = Modifier.height(22.dp))
+            Spacer(Modifier.height(8.dp))
+            LoadView(shows) { all ->
+                val list = all.take(20)
+                if (list.isEmpty()) Empty("Tu lista no tiene series nuevas.")
+                else SeriesShelf(app, nav, list, seriesH)
+            }
         }
     }
 }
 
+/** Escaparate de películas nuevas: ficha grande que rota sola y fila de pósters debajo. */
 @Composable
-private fun MoviesShowcaseBody(app: VisorApp, nav: Nav, list: List<VodStream>) {
+private fun MoviesShowcaseBody(app: VisorApp, nav: Nav, list: List<VodStream>, heroH: Dp, posterH: Dp) {
     val p = LocalPalette.current
-    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            var featured by remember { mutableIntStateOf(0) }
-            var rowFocused by remember { mutableStateOf(false) }
-            // Mientras no estés recorriendo la fila, la ficha cambia sola cada 8 segundos.
-            LaunchedEffect(rowFocused, list.size) {
-                if (!rowFocused) while (true) { delay(8000); featured = (featured + 1) % list.size }
-            }
-            val v = list[featured.coerceIn(0, list.lastIndex)]
-            val info = load(v.id) { app.repo.vodInfo(v.id) }.orNull()
+    var featured by remember { mutableIntStateOf(0) }
+    var rowFocused by remember { mutableStateOf(false) }
+    // Mientras no estés recorriendo la fila, la ficha cambia sola cada 8 segundos.
+    LaunchedEffect(rowFocused, list.size) {
+        if (!rowFocused) while (true) { delay(8000); featured = (featured + 1) % list.size }
+    }
+    val v = list[featured.coerceIn(0, list.lastIndex)]
+    val info = load(v.id) { app.repo.vodInfo(v.id) }.orNull()
+    val plotLines = when { heroH >= 170.dp -> 4; heroH >= 130.dp -> 3; else -> 2 }
 
-            // Ficha destacada
-            Box(Modifier.fillMaxWidth().height(230.dp).clip(RoundedCornerShape(20.dp)).background(p.surface)) {
-                Crossfade(targetState = info?.backdrop?.ifBlank { null } ?: info?.cover?.ifBlank { null } ?: v.icon, label = "fondo") { url ->
-                    Box(Modifier.fillMaxSize()) {
-                        Img(url, Modifier.fillMaxHeight().fillMaxWidth(0.62f).align(Alignment.CenterEnd))
-                    }
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Box(Modifier.fillMaxWidth().height(heroH).clip(RoundedCornerShape(18.dp)).background(p.surface)) {
+            Crossfade(targetState = info?.backdrop?.ifBlank { null } ?: info?.cover?.ifBlank { null } ?: v.icon, label = "fondo") { url ->
+                Box(Modifier.fillMaxSize()) {
+                    Img(url, Modifier.fillMaxHeight().fillMaxWidth(0.6f).align(Alignment.CenterEnd))
                 }
-                Box(
-                    Modifier.fillMaxSize().background(
-                        Brush.horizontalGradient(0.30f to p.surface, 0.62f to p.surface.copy(alpha = 0.55f), 1f to Color.Transparent)
-                    )
+            }
+            Box(
+                Modifier.fillMaxSize().background(
+                    Brush.horizontalGradient(0.40f to p.surface, 0.62f to p.surface.copy(alpha = 0.6f), 1f to Color.Transparent)
                 )
-                Column(
-                    Modifier.fillMaxHeight().fillMaxWidth(0.5f).padding(22.dp),
-                    verticalArrangement = Arrangement.spacedBy(6.dp, Alignment.CenterVertically),
-                ) {
-                    Pill("NUEVA", p.focusBg, p.focusText)
-                    T(info?.name?.ifBlank { null } ?: v.name, Type.heading, maxLines = 2)
-                    val meta = listOfNotNull(
-                        info?.year?.ifBlank { null }, info?.duration?.ifBlank { null }, info?.genre?.ifBlank { null },
-                        (info?.rating ?: v.rating).toDoubleOrNull()?.takeIf { it > 0 }?.let { "★ %.1f".format(it) },
-                    ).joinToString(" · ")
-                    if (meta.isNotBlank()) T(meta, Type.small, p.muted)
-                    T(info?.plot?.ifBlank { null } ?: "Cargando sinopsis…", Type.body, p.text, maxLines = 4)
+            )
+            Column(
+                Modifier.fillMaxHeight().fillMaxWidth(0.52f).padding(horizontal = 20.dp, vertical = 12.dp),
+                verticalArrangement = Arrangement.spacedBy(4.dp, Alignment.CenterVertically),
+            ) {
+                T(info?.name?.ifBlank { null } ?: v.name, Type.heading, maxLines = 1)
+                val meta = listOfNotNull(
+                    "Nueva",
+                    info?.year?.ifBlank { null }, info?.duration?.ifBlank { null }, info?.genre?.ifBlank { null },
+                    (info?.rating ?: v.rating).toDoubleOrNull()?.takeIf { it > 0 }?.let { "★ %.1f".format(it) },
+                ).joinToString(" · ")
+                T(meta, Type.small, p.muted)
+                T(info?.plot?.ifBlank { null } ?: "Cargando sinopsis…", Type.body, p.text, maxLines = plotLines)
+            }
+            Row(Modifier.align(Alignment.BottomEnd).padding(12.dp), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                list.indices.forEach { i ->
+                    Box(Modifier.size(if (i == featured) 14.dp else 5.dp, 5.dp).clip(CircleShape).background(if (i == featured) Color.White else Color.White.copy(alpha = 0.45f)))
                 }
-                // Puntos de posición
-                Row(Modifier.align(Alignment.BottomEnd).padding(14.dp), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                    list.indices.forEach { i ->
-                        Box(Modifier.size(if (i == featured) 14.dp else 5.dp, 5.dp).clip(CircleShape).background(if (i == featured) Color.White else Color.White.copy(alpha = 0.45f)))
+            }
+        }
+        // Pósters sin título debajo (el título se ve en la ficha al enfocarlos): así caben más grandes.
+        LazyRow(
+            modifier = Modifier.height(posterH + 12.dp).onFocusChanged { rowFocused = it.hasFocus },
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            contentPadding = PaddingValues(horizontal = 6.dp, vertical = 6.dp),
+        ) {
+            itemsIndexed(list, key = { _, m -> m.id }) { i, m ->
+                Focusable(
+                    onClick = { nav.push(Route.Movie(m)) },
+                    onFocused = { featured = i },
+                    onMenu = { app.favorites.toggle(m.toFav()) },
+                    shape = RoundedCornerShape(10.dp),
+                    scaleOnFocus = true,
+                ) { focused ->
+                    Box(
+                        Modifier.height(posterH).aspectRatio(2f / 3f)
+                            .border(if (focused) 3.dp else 0.dp, if (focused) p.focusBg else Color.Transparent, RoundedCornerShape(10.dp))
+                    ) {
+                        Img(m.icon, Modifier.fillMaxSize().clip(RoundedCornerShape(10.dp)))
                     }
                 }
             }
-            LazyRow(
-                modifier = Modifier.onFocusChanged { rowFocused = it.hasFocus },
-                horizontalArrangement = Arrangement.spacedBy(14.dp),
-                contentPadding = PaddingValues(horizontal = 4.dp, vertical = 6.dp),
-            ) {
-                itemsIndexed(list, key = { _, m -> m.id }) { i, m ->
-                    Poster(
-                        url = m.icon, title = m.name, width = 92.dp,
-                        onClick = { nav.push(Route.Movie(m)) },
-                        onFocused = { featured = i },
-                        onMenu = { app.favorites.toggle(m.toFav()) },
-                    )
-                }
-            }
+        }
     }
 }
 
 /** Fila de series nuevas con carátula y descripción. */
 @Composable
-private fun SeriesShelf(app: VisorApp, nav: Nav, state: Load<List<SeriesItem>>) {
+private fun SeriesShelf(app: VisorApp, nav: Nav, list: List<SeriesItem>, cardH: Dp) {
     val p = LocalPalette.current
-    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        T("Series nuevas", Type.h2)
-        LoadView(state) { all ->
-            val list = all.take(20)
-            if (list.isEmpty()) Empty("Tu lista no tiene series nuevas.") else LazyRow(horizontalArrangement = Arrangement.spacedBy(14.dp), contentPadding = PaddingValues(horizontal = 4.dp, vertical = 6.dp)) {
-                itemsIndexed(list, key = { _, s -> s.id }) { _, s ->
-                    Focusable(
-                        onClick = { nav.push(Route.Show(s)) },
-                        onMenu = { app.favorites.toggle(s.toFav()) },
-                        shape = RoundedCornerShape(16.dp),
-                        scaleOnFocus = true,
-                    ) { focused ->
-                        Row(
-                            Modifier.width(290.dp).height(124.dp).background(if (focused) p.focusBg else p.surface).padding(10.dp),
-                            horizontalArrangement = Arrangement.spacedBy(12.dp),
-                        ) {
-                            Img(s.cover, Modifier.width(70.dp).fillMaxHeight().clip(RoundedCornerShape(10.dp)))
-                            Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
-                                val fg = if (focused) p.focusText else p.text
-                                T(s.name, Type.label, fg, maxLines = 2)
-                                s.rating.toDoubleOrNull()?.takeIf { it > 0 }?.let { T("★ %.1f".format(it), Type.small, fg.copy(alpha = 0.7f)) }
-                                T(s.plot.ifBlank { "Sin descripción del proveedor." }, Type.small, fg.copy(alpha = 0.75f), maxLines = 4)
-                            }
-                        }
+    val plotLines = if (cardH >= 100.dp) 3 else 2
+    LazyRow(
+        modifier = Modifier.height(cardH + 12.dp),
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+        contentPadding = PaddingValues(horizontal = 6.dp, vertical = 6.dp),
+    ) {
+        itemsIndexed(list, key = { _, s -> s.id }) { _, s ->
+            Focusable(
+                onClick = { nav.push(Route.Show(s)) },
+                onMenu = { app.favorites.toggle(s.toFav()) },
+                shape = RoundedCornerShape(14.dp),
+                scaleOnFocus = true,
+            ) { focused ->
+                Row(
+                    Modifier.width(cardH * 3.2f).height(cardH).background(if (focused) p.focusBg else p.surface).padding(8.dp),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                ) {
+                    Img(s.cover, Modifier.fillMaxHeight().aspectRatio(2f / 3f).clip(RoundedCornerShape(8.dp)))
+                    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                        val fg = if (focused) p.focusText else p.text
+                        val rating = s.rating.toDoubleOrNull()?.takeIf { it > 0 }?.let { "  ★ %.1f".format(it) } ?: ""
+                        T(s.name + rating, Type.label, fg, maxLines = 1)
+                        T(s.plot.ifBlank { "Sin descripción del proveedor." }, Type.small, fg.copy(alpha = 0.75f), maxLines = plotLines)
                     }
                 }
             }
