@@ -4,7 +4,6 @@ import android.os.Bundle
 import android.view.WindowManager
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
-import androidx.compose.ui.input.key.nativeKeyEvent
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.BoxWithConstraints
