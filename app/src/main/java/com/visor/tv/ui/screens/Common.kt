@@ -16,6 +16,10 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.ui.ExperimentalComposeUiApi
+import androidx.compose.ui.focus.focusProperties
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.produceState
@@ -65,6 +69,7 @@ const val FAV_FOLDER = "__fav"
 
 /** Columna de carpetas del proveedor. Al enfocar una carpeta se abre su contenido. */
 @Composable
+@OptIn(ExperimentalComposeUiApi::class)
 fun FolderColumn(
     folders: List<Category>,
     selected: String?,
@@ -72,15 +77,31 @@ fun FolderColumn(
     width: Dp = 210.dp,
 ) {
     val p = LocalPalette.current
+    // Al bajar desde las pestañas se entra en la carpeta elegida (o en la primera que no sea Buscar),
+    // nunca directamente en el buscador; a Buscar se llega subiendo.
+    val targetId = selected?.takeIf { it != SEARCH_FOLDER } ?: folders.firstOrNull { it.id != SEARCH_FOLDER }?.id
+    val target = remember { FocusRequester() }
+    var targetAttached by remember { mutableStateOf(false) }
     Column(Modifier.width(width).fillMaxHeight()) {
         T("Carpetas", Type.small, p.muted, Modifier.padding(start = 12.dp, bottom = 6.dp))
-        LazyColumn(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+        LazyColumn(
+            modifier = Modifier.focusProperties { enter = { if (targetAttached) target else FocusRequester.Default } },
+            verticalArrangement = Arrangement.spacedBy(2.dp),
+        ) {
             items(folders, key = { it.id }) { c ->
+                val isTarget = c.id == targetId
+                if (isTarget) {
+                    DisposableEffect(Unit) {
+                        targetAttached = true
+                        onDispose { targetAttached = false }
+                    }
+                }
                 ListRow(
                     title = c.name,
                     selected = c.id == selected,
                     onClick = { onSelect(c.id) },
                     onFocused = { onSelect(c.id) },
+                    focusRequester = if (isTarget) target else null,
                 )
             }
         }
