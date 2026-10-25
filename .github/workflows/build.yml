@@ -3,10 +3,16 @@ name: Compilar APK
 on:
   push:
     branches: [main]
+    tags: ["v*"]
     paths-ignore:
       - "README.md"
       - "docs/**"
+  release:
+    types: [published]
   workflow_dispatch:
+
+permissions:
+  contents: write
 
 jobs:
   build:
@@ -48,8 +54,24 @@ jobs:
             exit 1
           }
 
+      - name: Nombrar el APK
+        run: |
+          if [ "$GITHUB_REF_TYPE" = "tag" ]; then V="${GITHUB_REF_NAME#v}"; else V="0.1.$GITHUB_RUN_NUMBER"; fi
+          mkdir -p out
+          cp app/build/outputs/apk/release/*.apk "out/visor-$V.apk"
+          echo "APK_FILE=out/visor-$V.apk" >> "$GITHUB_ENV"
+
       - uses: actions/upload-artifact@v4
         with:
           name: visor-apk
-          path: app/build/outputs/apk/release/*.apk
+          path: ${{ env.APK_FILE }}
           if-no-files-found: error
+
+      # Con una etiqueta v* (o al publicar una release desde GitHub) se crea/completa la release con el APK
+      - name: Publicar release
+        if: github.ref_type == 'tag'
+        uses: softprops/action-gh-release@v2
+        with:
+          files: ${{ env.APK_FILE }}
+          generate_release_notes: true
+          fail_on_unmatched_files: true
