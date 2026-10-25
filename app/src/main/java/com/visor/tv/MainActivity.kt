@@ -31,6 +31,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import com.visor.tv.data.PlayItem
@@ -133,14 +134,22 @@ private fun TabsScaffold(app: VisorApp, nav: Nav) {
     val now by produceState(initialValue = clock()) {
         while (true) { delay(20_000); value = clock() }
     }
+    var tabsFocused by remember { mutableStateOf(true) }
     LaunchedEffect(Unit) { try { firstTab.requestFocus() } catch (_: Exception) { } }
+    // Atrás desde el contenido sube primero a la barra de pestañas; desde ahí, a Inicio y luego sale.
+    BackHandler(enabled = !tabsFocused) {
+        try { firstTab.requestFocus() } catch (_: Exception) { }
+    }
 
     Column(Modifier.fillMaxSize().padding(start = 40.dp, end = 40.dp, top = 28.dp)) {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.Top) {
             Column(Modifier.weight(1f)) {
                 T(nav.tab.label, Type.title)
                 Spacer(Modifier.height(10.dp))
-                LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                LazyRow(
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    modifier = Modifier.onFocusChanged { tabsFocused = it.hasFocus },
+                ) {
                     itemsIndexed(Tab.entries.toList()) { i, t ->
                         val active = t == nav.tab
                         Focusable(
