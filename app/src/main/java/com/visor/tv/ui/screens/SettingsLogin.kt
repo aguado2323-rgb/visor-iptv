@@ -82,8 +82,12 @@ fun LoginScreen(app: VisorApp) {
     Box(Modifier.fillMaxSize().background(p.bg), contentAlignment = Alignment.Center) {
         Column(Modifier.width(420.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             T("Visor", Type.title)
-            T("Introduce los datos Xtream de tu proveedor. Se guardan cifrados en este aparato y no se envían a ningún otro sitio.", Type.small, p.muted, maxLines = 3)
-            field("Servidor (con puerto)", server, { server = it.trim() })
+            T("Introduce los datos Xtream de tu proveedor, o pega en Servidor el enlace M3U completo y se rellenan solos. Se guardan cifrados en este aparato.", Type.small, p.muted, maxLines = 3)
+            field("Servidor o enlace M3U", server, { v ->
+                val t = v.trim()
+                val parsed = parseXtreamLink(t)
+                if (parsed != null) { server = parsed.server; user = parsed.user; pass = parsed.pass } else server = t
+            })
             field("Usuario", user, { user = it.trim() })
             field("Contraseña", pass, { pass = it }, password = true)
             if (error != null) T(error!!, Type.small, p.rec, maxLines = 3)
@@ -94,7 +98,7 @@ fun LoginScreen(app: VisorApp) {
                 busy = true
                 scope.launch {
                     try {
-                        app.repo.login(Account(server, user, pass))
+                        app.repo.login(Account(baseOf(server), user, pass))
                     } catch (e: Exception) {
                         error = "No se pudo entrar: ${e.message ?: "error de conexión"}"
                     } finally {
@@ -238,5 +242,32 @@ fun SettingsScreen(app: VisorApp, nav: Nav) {
             onDismiss = { confirmLogout = false },
             subtitle = "Favoritos y grabaciones se conservan.",
         )
+    }
+}
+
+
+/** Se queda solo con esquema, host y puerto: https://host:8443/get.php?... → https://host:8443 */
+fun baseOf(url: String): String = try {
+    val u = java.net.URI(url.trim())
+    if (u.scheme == null || u.host == null) url.trim().trimEnd('/')
+    else u.scheme + "://" + u.host + (if (u.port > 0) ":" + u.port else "")
+} catch (e: Exception) {
+    url.trim().trimEnd('/')
+}
+
+/** Reconoce enlaces get.php / player_api.php con usuario y contraseña y los separa. */
+fun parseXtreamLink(url: String): Account? {
+    if (!url.contains("username=") || !url.contains("password=")) return null
+    return try {
+        val q = java.net.URI(url).rawQuery ?: return null
+        val params = q.split("&").mapNotNull {
+            val i = it.indexOf('=')
+            if (i <= 0) null else it.substring(0, i) to java.net.URLDecoder.decode(it.substring(i + 1), "UTF-8")
+        }.toMap()
+        val u = params["username"] ?: return null
+        val pw = params["password"] ?: return null
+        Account(baseOf(url), u, pw)
+    } catch (e: Exception) {
+        null
     }
 }
