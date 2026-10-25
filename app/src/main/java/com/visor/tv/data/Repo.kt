@@ -224,6 +224,27 @@ class Repo(private val ctx: Context, private val http: OkHttpClient, private val
         return if (el is JsonArray) o.s("backdrop_path").split(", ").firstOrNull().orEmpty() else o.s("backdrop_path")
     }
 
+    private fun videoInfo(v: JsonObject?): String {
+        if (v == null) return ""
+        val h = v.i("height"); val w = v.i("width")
+        val res = when {
+            h >= 2000 || w >= 3800 -> "4K"
+            h >= 1000 || w >= 1900 -> "1080p"
+            h >= 700 || w >= 1270 -> "720p"
+            h > 0 -> "${h}p"
+            else -> ""
+        }
+        val codec = v.s("codec_name").uppercase().replace("H264", "H.264").replace("HEVC", "HEVC")
+        val hdr = if (v.s("color_transfer").contains("2084") || v.s("color_transfer").contains("hlg")) "HDR" else ""
+        return listOf(res, hdr, codec).filter { it.isNotBlank() }.joinToString(" · ")
+    }
+
+    private fun audioInfo(a: JsonObject?): String {
+        if (a == null) return ""
+        val ch = when (a.i("channels")) { 0 -> ""; 1 -> "Mono"; 2 -> "Estéreo"; 6 -> "5.1"; 8 -> "7.1"; else -> "${a.i("channels")} canales" }
+        return listOf(ch, a.s("codec_name").uppercase()).filter { it.isNotBlank() }.joinToString(" · ")
+    }
+
     suspend fun vodInfo(id: Int): VodInfo = memo("vi:$id") {
         val root = cached("&action=get_vod_info&vod_id=$id", TTL_INFO).asObj() ?: throw IOException("Ficha no disponible")
         val info = root["info"].asObj() ?: JsonObject(emptyMap())
@@ -241,6 +262,13 @@ class Repo(private val ctx: Context, private val http: OkHttpClient, private val
             backdrop = backdrop(info),
             tmdbId = firstOf(info, "tmdb_id", "tmdb"),
             ext = firstOf(data, "container_extension").ifBlank { "mp4" },
+            originalName = firstOf(info, "o_name", "original_name"),
+            country = firstOf(info, "country"),
+            age = firstOf(info, "age", "mpaa_rating", "certification"),
+            releaseDate = firstOf(info, "releasedate", "release_date"),
+            video = videoInfo(info["video"].asObj()),
+            audio = audioInfo(info["audio"].asObj()),
+            trailer = firstOf(info, "youtube_trailer", "trailer"),
         )
     }
 
@@ -280,6 +308,9 @@ class Repo(private val ctx: Context, private val http: OkHttpClient, private val
             rating = firstOf(info, "rating"),
             tmdbId = firstOf(info, "tmdb", "tmdb_id"),
             seasons = seasons,
+            cast = firstOf(info, "cast", "actors"),
+            director = firstOf(info, "director"),
+            trailer = firstOf(info, "youtube_trailer", "trailer"),
         )
     }
 

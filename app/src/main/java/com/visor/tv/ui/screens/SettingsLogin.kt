@@ -242,7 +242,19 @@ fun SettingsScreen(app: VisorApp, nav: Nav) {
         item { ListRow("Vaciar caché de listas", subtitle = "Vuelve a descargar carpetas y fichas", onClick = { app.repo.clearCache(); msg = "Caché vaciada" }) }
         item { ListRow("Cerrar sesión", subtitle = "Borra la cuenta de este aparato", onClick = { confirmLogout = true }) }
         if (msg != null) item { T(msg!!, Type.small, p.muted, Modifier.padding(12.dp)) }
-        item { T("Visor ${com.visor.tv.BuildConfig.VERSION_NAME}", Type.small, p.muted, Modifier.padding(12.dp)) }
+        item { T("Aplicación", Type.small, p.muted, Modifier.padding(start = 12.dp, top = 12.dp, bottom = 4.dp)) }
+        item {
+            ListRow(
+                "Buscar actualizaciones",
+                subtitle = "Tienes la versión ${app.updater.current}",
+                onClick = {
+                    scope.launch {
+                        msg = "Buscando…"
+                        msg = if (app.updater.check(manual = true) == null) "Ya tienes la última versión" else null
+                    }
+                },
+            )
+        }
     }
 
     if (confirmLogout) {

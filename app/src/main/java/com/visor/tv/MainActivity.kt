@@ -56,6 +56,7 @@ import com.visor.tv.ui.screens.RecordingsScreen
 import com.visor.tv.ui.screens.SeriesDetail
 import com.visor.tv.ui.screens.SeriesScreen
 import com.visor.tv.ui.screens.SettingsScreen
+import com.visor.tv.ui.screens.UpdateDialog
 import kotlinx.coroutines.delay
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -111,6 +112,9 @@ private fun Root(app: VisorApp, onExit: () -> Unit) {
     val tabsState = rememberSaveableStateHolder()
     var unlocked by remember { mutableStateOf(!(app.settings.pinOnStart && app.vault.hasPin())) }
 
+    // Al abrir la app, mira si hay una versión nueva publicada en GitHub
+    LaunchedEffect(app.repo.account) { if (app.repo.account != null) app.updater.check() }
+
     // Actualización automática de la lista: al abrir la app y luego cada hora comprueba si toca.
     LaunchedEffect(app.repo.account, app.settings.refreshEvery) {
         if (app.repo.account == null) return@LaunchedEffect
@@ -138,6 +142,7 @@ private fun Root(app: VisorApp, onExit: () -> Unit) {
                     is Route.Movie -> MovieDetail(app, r.vod)
                     is Route.Show -> SeriesDetail(app, r.series)
                 }
+                if (app.updater.prompt) UpdateDialog(app)
             }
         }
     }

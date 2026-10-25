@@ -64,7 +64,7 @@ fun FavItem.toVod() = VodStream(id = id, name = name, icon = icon, rating = "", 
 fun SeriesItem.toFav() = FavItem(type = "series", id = id, name = name, icon = cover)
 fun FavItem.toSeries() = SeriesItem(id = id, name = name, cover = icon, rating = "", plot = "", categoryId = "")
 
-private fun rating(r: String): String? = r.toDoubleOrNull()?.takeIf { it > 0 }?.let { "★ %.1f".format(it) }
+internal fun rating(r: String): String? = r.toDoubleOrNull()?.takeIf { it > 0 }?.let { "★ %.1f".format(it) }
 
 // ---------------- Películas ----------------
 
@@ -129,75 +129,6 @@ fun MovieGrid(app: VisorApp, nav: Nav, list: List<VodStream>) {
     }
 }
 
-@Composable
-fun MovieDetail(app: VisorApp, vod: VodStream) {
-    val p = LocalPalette.current
-    val ctx = LocalContext.current
-    val info = load(vod.id) { app.repo.vodInfo(vod.id) }
-    val useTmdb = app.settings.artSource == ArtSource.TMDB && app.tmdb.available
-    val tmdb = load(vod.id, useTmdb, info.orNull()?.tmdbId) {
-        val id = info.orNull()?.tmdbId.orEmpty()
-        if (useTmdb) app.tmdb.art(id, isTv = false) else null
-    }
-    val art: TmdbArt? = tmdb.orNull()
-    val playBtn = remember { FocusRequester() }
-    val isFav = app.favorites.contains("vod", vod.id)
-    val resume = app.progress.positionOf("vod:${vod.id}")
-
-    Box(Modifier.fillMaxSize().background(p.bg)) {
-        val i = info.orNull()
-        // Imagen a pantalla completa: fondo de la película o, si no hay, su carátula.
-        val backdrop = art?.backdrop?.ifBlank { null } ?: i?.backdrop?.ifBlank { null } ?: i?.cover?.ifBlank { null } ?: vod.icon
-        Img(backdrop, Modifier.fillMaxHeight().fillMaxWidth(0.72f).align(Alignment.CenterEnd))
-        // Degradados para que el texto se lea sin tapar la imagen
-        Box(Modifier.fillMaxSize().background(Brush.horizontalGradient(0.30f to p.bg, 0.55f to p.bg.copy(alpha = 0.75f), 0.85f to Color.Transparent)))
-        Box(Modifier.fillMaxSize().background(Brush.verticalGradient(0.70f to Color.Transparent, 1f to p.bg.copy(alpha = 0.85f))))
-
-        Row(
-            Modifier.fillMaxSize().padding(horizontal = 44.dp, vertical = 32.dp),
-            horizontalArrangement = Arrangement.spacedBy(28.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Img(
-                art?.poster?.ifBlank { null } ?: i?.cover?.ifBlank { null } ?: vod.icon,
-                Modifier.fillMaxHeight(0.78f).aspectRatio(2f / 3f).clip(RoundedCornerShape(14.dp)),
-            )
-            Column(
-                Modifier.fillMaxWidth(0.62f).fillMaxHeight(),
-                verticalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterVertically),
-            ) {
-                T("Películas", Type.small, p.muted)
-                T(i?.name?.ifBlank { null } ?: vod.name, Type.title, maxLines = 2)
-                val meta = listOfNotNull(
-                    i?.year?.ifBlank { null }, i?.duration?.ifBlank { null }, i?.genre?.ifBlank { null },
-                    (art?.rating?.ifBlank { null }?.let { "★ $it (TMDB)" }) ?: rating(i?.rating ?: vod.rating),
-                ).joinToString(" · ")
-                if (meta.isNotBlank()) T(meta, Type.body, p.muted)
-                val plot = art?.overview?.ifBlank { null } ?: i?.plot.orEmpty()
-                when {
-                    plot.isNotBlank() -> T(plot, Type.body.copy(fontSize = 15.sp, lineHeight = 22.sp), p.text, maxLines = 9)
-                    info is Load.Loading -> T("Cargando sinopsis…", Type.body, p.muted)
-                    else -> T("El proveedor no incluye sinopsis para esta película.", Type.body, p.muted)
-                }
-                if (!i?.director.isNullOrBlank()) T("Dirección: ${i?.director}", Type.small, p.muted)
-                if (!i?.cast.isNullOrBlank()) T("Reparto: ${i?.cast}", Type.small, p.muted, maxLines = 2)
-                if (info is Load.Err) T("No se pudo cargar la ficha completa.", Type.small, p.muted)
-                Spacer(Modifier.height(6.dp))
-                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                    val ext = i?.ext ?: vod.ext
-                    val item = PlayItem(kind = "vod", id = vod.id, ext = ext, title = vod.name, icon = vod.icon)
-                    TvButton(if (resume > 0) "Continuar" else "Reproducir", focusRequester = playBtn, onClick = { play(ctx, listOf(item), 0) })
-                    if (resume > 0) TvButton("Desde el principio", onClick = {
-                        app.progress.update(item, 0, 1); play(ctx, listOf(item), 0)
-                    })
-                    TvButton(if (isFav) "★ En favoritos" else "☆ Añadir a favoritos", selected = isFav, onClick = { app.favorites.toggle(vod.toFav()) })
-                }
-            }
-        }
-    }
-    LaunchedEffect(Unit) { try { playBtn.requestFocus() } catch (_: Exception) { } }
-}
-
 // ---------------- Series ----------------
 
 @Composable
@@ -257,68 +188,6 @@ fun SeriesGrid(app: VisorApp, nav: Nav, list: List<SeriesItem>) {
                 onMenu = { app.favorites.toggle(s.toFav()) },
                 focusRequester = rememberReturnFocus(nav, key),
             )
-        }
-    }
-}
-
-@Composable
-fun SeriesDetail(app: VisorApp, series: SeriesItem) {
-    val p = LocalPalette.current
-    val ctx = LocalContext.current
-    val info = load(series.id) { app.repo.seriesInfo(series.id) }
-    val useTmdb = app.settings.artSource == ArtSource.TMDB && app.tmdb.available
-    val tmdb = load(series.id, useTmdb, info.orNull()?.tmdbId) {
-        val id = info.orNull()?.tmdbId.orEmpty()
-        if (useTmdb) app.tmdb.art(id, isTv = true) else null
-    }
-    val art = tmdb.orNull()
-    var season by remember { mutableIntStateOf(-1) }
-    val isFav = app.favorites.contains("series", series.id)
-
-    Row(Modifier.fillMaxSize().background(p.bg).padding(40.dp), horizontalArrangement = Arrangement.spacedBy(32.dp)) {
-        val i = info.orNull()
-        Column(Modifier.width(240.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Img(art?.poster?.ifBlank { null } ?: i?.cover?.ifBlank { null } ?: series.cover,
-                Modifier.width(150.dp).aspectRatio(2f / 3f).clip(RoundedCornerShape(14.dp)))
-            T("Series", Type.small, p.muted)
-            T(i?.name?.ifBlank { null } ?: series.name, Type.heading, maxLines = 2)
-            val meta = listOfNotNull(i?.year?.ifBlank { null }, i?.genre?.ifBlank { null },
-                art?.rating?.ifBlank { null }?.let { "★ $it (TMDB)" } ?: rating(i?.rating ?: series.rating)).joinToString(" · ")
-            if (meta.isNotBlank()) T(meta, Type.small, p.muted, maxLines = 2)
-            T(art?.overview?.ifBlank { null } ?: i?.plot?.ifBlank { null } ?: series.plot, Type.small, p.text, maxLines = 7)
-            TvButton(if (isFav) "★ En favoritos" else "☆ Añadir a favoritos", selected = isFav, onClick = { app.favorites.toggle(series.toFav()) })
-        }
-        Column(Modifier.weight(1f)) {
-            LoadView(info) { si ->
-                if (si.seasons.isEmpty()) {
-                    Empty("El proveedor no tiene episodios para esta serie.")
-                } else {
-                    val seasons = si.seasons.keys.toList()
-                    if (season !in seasons) season = seasons.first()
-                    LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        items(seasons) { s ->
-                            TvButton("Temporada $s", selected = s == season, onClick = { season = s }, onFocused = { season = s })
-                        }
-                    }
-                    Spacer(Modifier.height(12.dp))
-                    val eps = si.seasons[season].orEmpty()
-                    val queue = eps.map {
-                        PlayItem(kind = "episode", id = it.id, ext = it.ext, title = "T$season · E${it.num}  ${it.title}",
-                            subtitle = series.name, icon = it.image.ifBlank { series.cover }, seriesId = series.id)
-                    }
-                    LazyColumn(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                        itemsIndexed(eps, key = { _, e -> e.id }) { idx, e ->
-                            val pos = app.progress.positionOf("episode:${e.id}")
-                            ListRow(
-                                title = "E${e.num} · ${e.title}",
-                                subtitle = listOfNotNull(e.duration.ifBlank { null }, if (pos > 0) "a medias" else null, e.plot.ifBlank { null }).joinToString(" · "),
-                                leading = { Img(e.image.ifBlank { series.cover }, Modifier.width(96.dp).aspectRatio(16f / 9f).clip(RoundedCornerShape(8.dp))) },
-                                onClick = { play(ctx, queue, idx) },
-                            )
-                        }
-                    }
-                }
-            }
         }
     }
 }

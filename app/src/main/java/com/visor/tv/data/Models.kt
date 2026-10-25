@@ -54,6 +54,15 @@ data class VodInfo(
     val backdrop: String,
     val tmdbId: String,
     val ext: String,
+    val originalName: String = "",
+    val country: String = "",
+    val age: String = "",
+    val releaseDate: String = "",
+    /** Calidad de imagen, p. ej. "1080p · HEVC" */
+    val video: String = "",
+    /** Sonido, p. ej. "5.1 · EAC3" */
+    val audio: String = "",
+    val trailer: String = "",
 )
 
 data class Episode(
@@ -77,6 +86,9 @@ data class SeriesInfo(
     val rating: String,
     val tmdbId: String,
     val seasons: Map<Int, List<Episode>>,
+    val cast: String = "",
+    val director: String = "",
+    val trailer: String = "",
 )
 
 data class EpgEntry(val title: String, val desc: String, val start: Long, val end: Long) {

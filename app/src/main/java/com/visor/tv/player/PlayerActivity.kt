@@ -38,6 +38,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableLongStateOf
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -100,6 +101,11 @@ private fun PlayerScreen(app: VisorApp, onExit: () -> Unit) {
     var panel by remember { mutableStateOf(false) }
     var guide by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
+    // Aviso de "siguiente episodio" al final de cada capítulo
+    var nextShown by remember { mutableStateOf(false) }
+    var nextDismissed by remember { mutableStateOf(false) }
+    var countdown by remember { mutableIntStateOf(10) }
+    val nextButton = remember { FocusRequester() }
     var epgNow by remember { mutableStateOf<EpgEntry?>(null) }
     var pos by remember { mutableLongStateOf(0L) }
     var dur by remember { mutableLongStateOf(0L) }
@@ -128,13 +134,21 @@ private fun PlayerScreen(app: VisorApp, onExit: () -> Unit) {
         playing = true
     }
 
+    fun hasNext() = item.kind == "episode" && app.queue.index < app.queue.items.lastIndex
+
+    fun playNext() {
+        saveProgress()
+        nextShown = false
+        nextDismissed = false
+        app.queue.move(1)?.let { n -> item = n; start(n) }
+    }
+
     DisposableEffect(engine) {
         engine.onError = { error = it; overlay = true }
         engine.onEnded = {
             saveProgress()
-            if (item.kind == "episode" && app.queue.index < app.queue.items.lastIndex) {
-                app.queue.move(1)?.let { n -> item = n; start(n) }
-            } else if (!isLive) onExit()
+            if (hasNext() && !nextDismissed) playNext()
+            else if (!isLive) onExit()
         }
         start(item)
         onDispose {
@@ -156,6 +170,11 @@ private fun PlayerScreen(app: VisorApp, onExit: () -> Unit) {
             pos = engine.position(); dur = engine.duration(); playing = engine.isPlaying()
             if (overlay && !panel && error == null && System.currentTimeMillis() - lastKey > 6000) overlay = false
             if (guide && System.currentTimeMillis() - lastKey > 15000) guide = false
+            // Últimos 20 s del capítulo (créditos): ofrece el siguiente
+            if (hasNext() && !nextShown && !nextDismissed && dur > 60_000 && dur - pos in 1..20_000) {
+                countdown = 10
+                nextShown = true
+            }
             if (++tick % 60 == 0) saveProgress()
         }
     }
@@ -182,8 +201,16 @@ private fun PlayerScreen(app: VisorApp, onExit: () -> Unit) {
         app.queue.move(delta)?.let { n -> item = n; start(n); overlay = true; lastKey = System.currentTimeMillis() }
     }
 
+    LaunchedEffect(nextShown) {
+        if (!nextShown) return@LaunchedEffect
+        try { nextButton.requestFocus() } catch (_: Exception) { }
+        while (nextShown && countdown > 0) { delay(1000); countdown-- }
+        if (nextShown) playNext()
+    }
+
     BackHandler {
         when {
+            nextShown -> { nextShown = false; nextDismissed = true }
             guide -> guide = false
             panel -> panel = false
             overlay && error == null -> overlay = false
@@ -197,7 +224,7 @@ private fun PlayerScreen(app: VisorApp, onExit: () -> Unit) {
             .background(Color.Black)
             .onPreviewKeyEvent { e ->
                 if (e.type == KeyEventType.KeyDown) lastKey = System.currentTimeMillis()
-                if (e.type != KeyEventType.KeyDown || overlay || guide) return@onPreviewKeyEvent false
+                if (e.type != KeyEventType.KeyDown || overlay || guide || nextShown) return@onPreviewKeyEvent false
                 when (e.key) {
                     Key.DirectionUp -> { if (isLive) zap(-1) else overlay = true; true }
                     Key.DirectionDown -> { if (isLive) zap(1) else overlay = true; true }
@@ -282,6 +309,31 @@ private fun PlayerScreen(app: VisorApp, onExit: () -> Unit) {
 
         if (panel) {
             TracksPanel(engine, tracksVersion, Modifier.align(Alignment.CenterEnd)) { tracksVersion++ }
+        }
+
+        if (nextShown) {
+            val next = app.queue.items.getOrNull(app.queue.index + 1)
+            Column(
+                Modifier
+                    .align(Alignment.BottomEnd)
+                    .padding(32.dp)
+                    .width(380.dp)
+                    .clip(RoundedCornerShape(20.dp))
+                    .background(p.surface.copy(alpha = 0.96f))
+                    .padding(20.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                T("Siguiente episodio", Type.small, p.muted)
+                T(next?.title ?: "", Type.h2, maxLines = 2)
+                T("Empieza en $countdown s", Type.small, p.muted)
+                Box(Modifier.fillMaxWidth().height(3.dp).clip(CircleShape).background(p.line)) {
+                    Box(Modifier.fillMaxWidth((10 - countdown) / 10f).height(3.dp).background(p.text))
+                }
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    TvButton("Ver ahora", focusRequester = nextButton, onClick = { playNext() })
+                    TvButton("Cancelar", onClick = { nextShown = false; nextDismissed = true })
+                }
+            }
         }
 
         if (guide && isLive) {

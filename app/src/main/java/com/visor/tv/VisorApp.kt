@@ -37,6 +37,8 @@ class VisorApp : Application(), ImageLoaderFactory {
         private set
     lateinit var tmdb: Tmdb
         private set
+    lateinit var updater: com.visor.tv.data.Updater
+        private set
     val queue = PlaybackQueue()
 
     override fun onCreate() {
@@ -60,6 +62,7 @@ class VisorApp : Application(), ImageLoaderFactory {
         progress = Progress(this)
         recordings = RecordingStore(this)
         tmdb = Tmdb(http)
+        updater = com.visor.tv.data.Updater(this, http)
         createChannels()
     }
 
