@@ -27,7 +27,11 @@ class Settings(context: Context) {
 
     var theme by mutableStateOf(load("theme", ThemeMode.LIGHT))
         private set
+    /** Reproductor para la TV en directo. */
     var engine by mutableStateOf(load("engine", Engine.EXO))
+        private set
+    /** Reproductor para películas, series y grabaciones. Si nunca se ha elegido, empieza igual que el de directo. */
+    var vodEngine by mutableStateOf(load("vodEngine", engine))
         private set
     var liveFormat by mutableStateOf(load("liveFormat", LiveFormat.TS))
         private set
@@ -59,6 +63,8 @@ class Settings(context: Context) {
 
     fun updateTheme(v: ThemeMode) { theme = v; p.edit().putString("theme", v.name).apply() }
     fun updateEngine(v: Engine) { engine = v; p.edit().putString("engine", v.name).apply() }
+    fun updateVodEngine(v: Engine) { vodEngine = v; p.edit().putString("vodEngine", v.name).apply() }
+    fun engineFor(kind: String): Engine = if (kind == "live") engine else vodEngine
     fun updateLiveFormat(v: LiveFormat) { liveFormat = v; p.edit().putString("liveFormat", v.name).apply() }
     fun updateArt(v: ArtSource) { artSource = v; p.edit().putString("art", v.name).apply() }
     fun updateAudio(v: AudioLang) { audioLang = v; p.edit().putString("audio", v.name).apply() }

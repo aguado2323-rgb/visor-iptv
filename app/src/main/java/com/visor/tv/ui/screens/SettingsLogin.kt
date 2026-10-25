@@ -189,7 +189,8 @@ fun SettingsScreen(app: VisorApp, nav: Nav) {
     LazyColumn(Modifier.width(620.dp), verticalArrangement = Arrangement.spacedBy(3.dp)) {
         item { T("Aspecto y reproducción", Type.small, p.muted, Modifier.padding(start = 12.dp, top = 4.dp, bottom = 4.dp)) }
         item { ListRow("Tema", trailing = s.theme.label, onClick = { s.updateTheme(s.theme.next()) }) }
-        item { ListRow("Reproductor", subtitle = "Si un canal no va con uno, prueba con el otro", trailing = s.engine.label, onClick = { s.updateEngine(s.engine.next()) }) }
+        item { ListRow("Reproductor de TV en directo", subtitle = "Si un canal no va con uno, prueba con el otro", trailing = s.engine.label, onClick = { s.updateEngine(s.engine.next()) }) }
+        item { ListRow("Reproductor de películas y series", subtitle = "También para las grabaciones", trailing = s.vodEngine.label, onClick = { s.updateVodEngine(s.vodEngine.next()) }) }
         item { ListRow("Formato de los canales en directo", trailing = s.liveFormat.label, onClick = { s.updateLiveFormat(s.liveFormat.next()) }) }
         item { ListRow("Idioma de audio preferido", trailing = s.audioLang.label, onClick = { s.updateAudio(s.audioLang.next()) }) }
         item { ListRow("Subtítulos al empezar", trailing = s.subsDefault.label, onClick = { s.updateSubs(s.subsDefault.next()) }) }

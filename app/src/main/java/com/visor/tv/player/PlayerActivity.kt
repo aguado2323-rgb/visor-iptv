@@ -97,7 +97,7 @@ private fun PlayerScreen(app: VisorApp, onExit: () -> Unit) {
     val p = LocalPalette.current
     val ctx = LocalContext.current
     var item by remember { mutableStateOf(app.queue.current!!) }
-    var engineType by remember { mutableStateOf(app.settings.engine) }
+    var engineType by remember { mutableStateOf(app.settings.engineFor(app.queue.current!!.kind)) }
     var overlay by remember { mutableStateOf(true) }
     var panel by remember { mutableStateOf(false) }
     var guide by remember { mutableStateOf(false) }

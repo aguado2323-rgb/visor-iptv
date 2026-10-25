@@ -43,7 +43,7 @@ Most IPTV apps on Fire TV are cluttered and slow. Visor focuses on what you use 
 - Artwork from your provider by default, or TMDB.
 
 ### Player
-- **ExoPlayer or VLC.** Choose in Settings, or switch on the fly if a stream misbehaves.
+- **ExoPlayer or VLC,** chosen separately for live TV and for movies, series and recordings. You can also switch on the fly if a stream misbehaves.
 - **Audio and subtitles panel** with every track the stream carries.
 - **Scrubbable timeline:** hold **→** and the step grows (10 s → 30 s → 1 min → 5 min). Release to jump there.
 - **Next episode** card with a 10-second countdown during the credits.
