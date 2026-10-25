@@ -14,6 +14,12 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableLongStateOf
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.type
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -84,11 +90,10 @@ fun HomeScreen(app: VisorApp, nav: Nav) {
 
     // Todo se dimensiona a partir del alto disponible, para que en una tele 16:9 quepa sin cortarse ni desplazarse.
     BoxWithConstraints(Modifier.fillMaxSize()) {
-        val fixed = 22.dp + 8.dp + 12.dp + 14.dp + 22.dp + 8.dp + 12.dp + 6.dp // rótulos, separaciones y márgenes de enfoque
+        val fixed = 22.dp + 8.dp + 14.dp + 22.dp + 8.dp + 12.dp + 6.dp // rótulos, separaciones y márgenes de enfoque
         val flex = (maxHeight - fixed).coerceAtLeast(240.dp)
-        val heroH = flex * 0.44f
-        val posterH = flex * 0.28f
-        val seriesH = flex * 0.28f
+        val heroH = flex * 0.68f
+        val seriesH = flex * 0.32f
 
         Column(Modifier.fillMaxSize()) {
             T("Películas nuevas", Type.h2, modifier = Modifier.height(22.dp))
@@ -96,7 +101,7 @@ fun HomeScreen(app: VisorApp, nav: Nav) {
             LoadView(movies) { all ->
                 val list = all.take(20)
                 if (list.isEmpty()) Empty("Tu lista no tiene películas nuevas.")
-                else MoviesShowcaseBody(app, nav, list, heroH, posterH)
+                else MoviesShowcaseBody(app, nav, list, heroH)
             }
             Spacer(Modifier.height(14.dp))
             T("Series nuevas", Type.h2, modifier = Modifier.height(22.dp))
@@ -110,37 +115,68 @@ fun HomeScreen(app: VisorApp, nav: Nav) {
     }
 }
 
-/** Escaparate de películas nuevas: ficha grande que rota sola y fila de pósters debajo. */
+/**
+ * Escaparate de películas nuevas: una sola ficha grande. Rota sola cada 8 s; con el foco encima,
+ * ← → pasan de película, OK abre la ficha y ≡ la añade a favoritos.
+ */
 @Composable
-private fun MoviesShowcaseBody(app: VisorApp, nav: Nav, list: List<VodStream>, heroH: Dp, posterH: Dp) {
+private fun MoviesShowcaseBody(app: VisorApp, nav: Nav, list: List<VodStream>, heroH: Dp) {
     val p = LocalPalette.current
     var featured by remember { mutableIntStateOf(0) }
-    var rowFocused by remember { mutableStateOf(false) }
-    // Mientras no estés recorriendo la fila, la ficha cambia sola cada 8 segundos.
-    LaunchedEffect(rowFocused, list.size) {
-        if (!rowFocused) while (true) { delay(8000); featured = (featured + 1) % list.size }
+    var heroFocused by remember { mutableStateOf(false) }
+    var lastMove by remember { mutableLongStateOf(0L) }
+    // Rota sola; si acabas de moverte con el mando, espera antes de seguir.
+    LaunchedEffect(list.size) {
+        while (true) {
+            delay(8000)
+            if (System.currentTimeMillis() - lastMove > 12_000) featured = (featured + 1) % list.size
+        }
     }
     val v = list[featured.coerceIn(0, list.lastIndex)]
     val info = load(v.id) { app.repo.vodInfo(v.id) }.orNull()
-    val plotLines = when { heroH >= 170.dp -> 4; heroH >= 130.dp -> 3; else -> 2 }
+    val plotLines = when { heroH >= 230.dp -> 5; heroH >= 180.dp -> 4; heroH >= 130.dp -> 3; else -> 2 }
 
-    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Box(Modifier.fillMaxWidth().height(heroH).clip(RoundedCornerShape(18.dp)).background(p.surface)) {
+    Focusable(
+        onClick = { nav.push(Route.Movie(v)) },
+        onMenu = { app.favorites.toggle(v.toFav()) },
+        onFocused = { heroFocused = true },
+        shape = RoundedCornerShape(18.dp),
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(heroH)
+            .onFocusChanged { heroFocused = it.isFocused || it.hasFocus }
+            .onPreviewKeyEvent { e ->
+                if (e.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
+                when (e.key) {
+                    Key.DirectionRight -> { featured = (featured + 1) % list.size; lastMove = System.currentTimeMillis(); true }
+                    Key.DirectionLeft -> {
+                        // En la primera película, ← no hace nada para no saltar fuera por error.
+                        if (featured > 0) featured -= 1
+                        lastMove = System.currentTimeMillis(); true
+                    }
+                    else -> false
+                }
+            },
+    ) { focused ->
+        Box(
+            Modifier.fillMaxSize().background(p.surface)
+                .border(if (focused) 3.dp else 0.dp, if (focused) p.focusBg else Color.Transparent, RoundedCornerShape(18.dp))
+        ) {
             Crossfade(targetState = info?.backdrop?.ifBlank { null } ?: info?.cover?.ifBlank { null } ?: v.icon, label = "fondo") { url ->
                 Box(Modifier.fillMaxSize()) {
-                    Img(url, Modifier.fillMaxHeight().fillMaxWidth(0.6f).align(Alignment.CenterEnd))
+                    Img(url, Modifier.fillMaxHeight().fillMaxWidth(0.62f).align(Alignment.CenterEnd))
                 }
             }
             Box(
                 Modifier.fillMaxSize().background(
-                    Brush.horizontalGradient(0.40f to p.surface, 0.62f to p.surface.copy(alpha = 0.6f), 1f to Color.Transparent)
+                    Brush.horizontalGradient(0.38f to p.surface, 0.60f to p.surface.copy(alpha = 0.6f), 1f to Color.Transparent)
                 )
             )
             Column(
-                Modifier.fillMaxHeight().fillMaxWidth(0.52f).padding(horizontal = 20.dp, vertical = 12.dp),
-                verticalArrangement = Arrangement.spacedBy(4.dp, Alignment.CenterVertically),
+                Modifier.fillMaxHeight().fillMaxWidth(0.52f).padding(horizontal = 24.dp, vertical = 16.dp),
+                verticalArrangement = Arrangement.spacedBy(6.dp, Alignment.CenterVertically),
             ) {
-                T(info?.name?.ifBlank { null } ?: v.name, Type.heading, maxLines = 1)
+                T(info?.name?.ifBlank { null } ?: v.name, Type.heading, maxLines = 2)
                 val meta = listOfNotNull(
                     "Nueva",
                     info?.year?.ifBlank { null }, info?.duration?.ifBlank { null }, info?.genre?.ifBlank { null },
@@ -148,33 +184,12 @@ private fun MoviesShowcaseBody(app: VisorApp, nav: Nav, list: List<VodStream>, h
                 ).joinToString(" · ")
                 T(meta, Type.small, p.muted)
                 T(info?.plot?.ifBlank { null } ?: "Cargando sinopsis…", Type.body, p.text, maxLines = plotLines)
+                T(if (heroFocused) "← → otras películas · OK ver ficha · ≡ favoritos" else "Selecciónala para recorrer las novedades", Type.small, p.muted)
             }
-            Row(Modifier.align(Alignment.BottomEnd).padding(12.dp), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+            // Bolitas de posición
+            Row(Modifier.align(Alignment.BottomEnd).padding(14.dp), horizontalArrangement = Arrangement.spacedBy(5.dp), verticalAlignment = Alignment.CenterVertically) {
                 list.indices.forEach { i ->
-                    Box(Modifier.size(if (i == featured) 14.dp else 5.dp, 5.dp).clip(CircleShape).background(if (i == featured) Color.White else Color.White.copy(alpha = 0.45f)))
-                }
-            }
-        }
-        // Pósters sin título debajo (el título se ve en la ficha al enfocarlos): así caben más grandes.
-        LazyRow(
-            modifier = Modifier.height(posterH + 12.dp).onFocusChanged { rowFocused = it.hasFocus },
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
-            contentPadding = PaddingValues(horizontal = 6.dp, vertical = 6.dp),
-        ) {
-            itemsIndexed(list, key = { _, m -> m.id }) { i, m ->
-                Focusable(
-                    onClick = { nav.push(Route.Movie(m)) },
-                    onFocused = { featured = i },
-                    onMenu = { app.favorites.toggle(m.toFav()) },
-                    shape = RoundedCornerShape(10.dp),
-                    scaleOnFocus = true,
-                ) { focused ->
-                    Box(
-                        Modifier.height(posterH).aspectRatio(2f / 3f)
-                            .border(if (focused) 3.dp else 0.dp, if (focused) p.focusBg else Color.Transparent, RoundedCornerShape(10.dp))
-                    ) {
-                        Img(m.icon, Modifier.fillMaxSize().clip(RoundedCornerShape(10.dp)))
-                    }
+                    Box(Modifier.size(if (i == featured) 16.dp else 6.dp, 6.dp).clip(CircleShape).background(if (i == featured) Color.White else Color.White.copy(alpha = 0.45f)))
                 }
             }
         }
