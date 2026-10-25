@@ -21,7 +21,6 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import com.visor.tv.VisorApp
-import com.visor.tv.data.FavItem
 import com.visor.tv.data.PlayItem
 import com.visor.tv.play
 import com.visor.tv.record.Recording
@@ -47,7 +46,6 @@ fun RecordingsScreen(app: VisorApp) {
     val ctx = LocalContext.current
     var action by remember { mutableStateOf<Recording?>(null) }
     var pickChannel by remember { mutableStateOf(false) }
-    var timerFor by remember { mutableStateOf<FavItem?>(null) }
 
     val all = app.recordings.items.toList()
     val now = all.filter { it.status == Recording.STATUS_RECORDING }
@@ -86,12 +84,12 @@ fun RecordingsScreen(app: VisorApp) {
             verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
             T("Nuevo temporizador", Type.h2)
-            T("Graba un canal a la hora que tú marques, una vez o de forma periódica. También puedes grabar desde la Guía o con ≡ sobre un canal.", Type.small, p.muted, maxLines = 5)
+            T("Elige cualquier canal y luego un programa de su guía o las horas exactas, una vez o de forma periódica, y dónde guardarlo.", Type.small, p.muted, maxLines = 5)
             TvButton("Programar grabación…", dot = p.rec, onClick = { pickChannel = true }, modifier = Modifier.fillMaxWidth())
             val vol = app.recordings.volumes()
             val v = vol.firstOrNull { it.index == app.settings.storageIndex } ?: vol.first()
-            T("Se guarda en: ${v.label}" + (size(v.freeBytes).takeIf { it.isNotBlank() }?.let { " · $it libres" } ?: ""), Type.small, p.muted, maxLines = 2)
-            T("Se cambia en Ajustes. Conecta una memoria USB si el espacio es poco.", Type.small, p.muted, maxLines = 2)
+            T("Por defecto: ${v.label}" + (size(v.freeBytes).takeIf { it.isNotBlank() }?.let { " · $it libres" } ?: ""), Type.small, p.muted, maxLines = 2)
+            T("Puedes elegir otro sitio en cada grabación. Conecta una memoria USB si el espacio es poco.", Type.small, p.muted, maxLines = 3)
         }
     }
 
@@ -113,22 +111,5 @@ fun RecordingsScreen(app: VisorApp) {
         ActionsDialog(r.title, acts, onDismiss = { action = null }, subtitle = r.channel)
     }
 
-    if (pickChannel) {
-        val favs = app.favorites.of("live")
-        if (favs.isEmpty()) {
-            ActionsDialog(
-                "Elige el canal",
-                listOf("Entendido" to {}),
-                onDismiss = { pickChannel = false },
-                subtitle = "Primero añade el canal a favoritos (≡ sobre el canal en TV), o prográmalo directamente desde allí.",
-            )
-        } else {
-            ActionsDialog(
-                "Elige el canal",
-                favs.map { f -> f.name to { timerFor = f } },
-                onDismiss = { pickChannel = false },
-            )
-        }
-    }
-    timerFor?.let { f -> TimerDialog(app, f.id, f.name, onDismiss = { timerFor = null }) }
+    if (pickChannel) NewTimerDialog(app, onDismiss = { pickChannel = false })
 }

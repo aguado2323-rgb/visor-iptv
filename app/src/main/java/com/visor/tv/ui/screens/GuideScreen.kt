@@ -60,9 +60,10 @@ fun GuideScreen(app: VisorApp) {
         n - (n % (30 * 60_000L))
     }
 
-    Row(Modifier.fillMaxSize(), horizontalArrangement = Arrangement.spacedBy(20.dp)) {
+    val entry = remember { FolderEntry() }
+    Row(Modifier.fillMaxSize().enterAtFolders(entry), horizontalArrangement = Arrangement.spacedBy(20.dp)) {
         LoadView(cats) { list ->
-            FolderColumn(listOf(Category(FAV_FOLDER, "★ Favoritos")) + list, selected, { selected = it }, width = 170.dp)
+            FolderColumn(listOf(Category(FAV_FOLDER, "★ Favoritos")) + list, selected, { selected = it }, width = 170.dp, entry = entry)
         }
         Column(Modifier.weight(1f)) {
             // Ficha del programa enfocado

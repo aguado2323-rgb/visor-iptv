@@ -91,7 +91,7 @@ class RecordService : Service() {
 
         val stamp = SimpleDateFormat("yyyyMMdd_HHmm", Locale.US).format(Date(r.start))
         val safe = r.title.replace(Regex("[^\\p{L}\\p{N} _-]"), "").trim().take(60).ifBlank { "grabacion" }
-        val out = File(store.targetDir(app.settings.storageIndex), "${stamp}_$safe.ts")
+        val out = File(store.targetDir(if (r.storage >= 0) r.storage else app.settings.storageIndex), "${stamp}_$safe.ts")
         r = r.copy(status = Recording.STATUS_RECORDING, file = out.absolutePath, error = "")
         update(r)
 

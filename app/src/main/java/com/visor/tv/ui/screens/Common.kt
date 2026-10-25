@@ -20,6 +20,8 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.focus.focusProperties
+import androidx.compose.ui.focus.FocusDirection
+import androidx.compose.foundation.focusGroup
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.produceState
@@ -71,6 +73,22 @@ fun <T> LoadView(state: Load<T>, modifier: Modifier = Modifier, content: @Compos
 
 const val FAV_FOLDER = "__fav"
 
+/** Punto de entrada de una pantalla con carpetas: al bajar desde las pestañas, el foco va a la carpeta elegida. */
+class FolderEntry {
+    val fr = FocusRequester()
+    var attached by mutableStateOf(false)
+    fun target(): FocusRequester = if (attached) fr else FocusRequester.Default
+}
+
+/**
+ * Para la fila que contiene las carpetas y su contenido: al entrar bajando desde las pestañas,
+ * el foco cae siempre en la carpeta elegida, aunque el contenido (pósters, canales) quede más cerca.
+ */
+@OptIn(ExperimentalComposeUiApi::class)
+fun Modifier.enterAtFolders(entry: FolderEntry): Modifier = this
+    .focusProperties { enter = { dir -> if (dir == FocusDirection.Down) entry.target() else FocusRequester.Default } }
+    .focusGroup()
+
 /** Columna de carpetas del proveedor. Al enfocar una carpeta se abre su contenido. */
 @Composable
 @OptIn(ExperimentalComposeUiApi::class)
@@ -79,25 +97,25 @@ fun FolderColumn(
     selected: String?,
     onSelect: (String) -> Unit,
     width: Dp = 210.dp,
+    entry: FolderEntry = remember { FolderEntry() },
 ) {
     val p = LocalPalette.current
     // Al bajar desde las pestañas se entra en la carpeta elegida (o en la primera que no sea Buscar),
     // nunca directamente en el buscador; a Buscar se llega subiendo.
     val targetId = selected?.takeIf { it != SEARCH_FOLDER } ?: folders.firstOrNull { it.id != SEARCH_FOLDER }?.id
-    val target = remember { FocusRequester() }
-    var targetAttached by remember { mutableStateOf(false) }
+    val target = entry.fr
     Column(Modifier.width(width).fillMaxHeight()) {
         T("Carpetas", Type.small, p.muted, Modifier.padding(start = 12.dp, bottom = 6.dp))
         LazyColumn(
-            modifier = Modifier.focusProperties { enter = { if (targetAttached) target else FocusRequester.Default } },
+            modifier = Modifier.focusProperties { enter = { entry.target() } },
             verticalArrangement = Arrangement.spacedBy(2.dp),
         ) {
             items(folders, key = { it.id }) { c ->
                 val isTarget = c.id == targetId
                 if (isTarget) {
-                    DisposableEffect(Unit) {
-                        targetAttached = true
-                        onDispose { targetAttached = false }
+                    DisposableEffect(c.id) {
+                        entry.attached = true
+                        onDispose { entry.attached = false }
                     }
                 }
                 ListRow(

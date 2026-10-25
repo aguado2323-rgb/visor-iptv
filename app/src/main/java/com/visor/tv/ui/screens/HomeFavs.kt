@@ -264,5 +264,5 @@ fun FavoritesScreen(app: VisorApp, nav: Nav) {
         }
     }
     menuFor?.let { s -> ChannelActions(app, s, onTimer = { timerFor = s }, onDismiss = { menuFor = null }) }
-    timerFor?.let { s -> TimerDialog(app, s.id, s.name, onDismiss = { timerFor = null }) }
+    timerFor?.let { s -> NewTimerDialog(app, onDismiss = { timerFor = null }, presetChannel = s) }
 }

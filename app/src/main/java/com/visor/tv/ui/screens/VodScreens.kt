@@ -72,10 +72,11 @@ internal fun rating(r: String): String? = r.toDoubleOrNull()?.takeIf { it > 0 }?
 fun MoviesScreen(app: VisorApp, nav: Nav) {
     val cats = load(app.repo.version) { app.repo.vodCategories() }
     var selected by rememberSaveable { mutableStateOf<String?>(null) }
-    Row(Modifier.fillMaxSize(), horizontalArrangement = Arrangement.spacedBy(28.dp)) {
+    val entry = remember { FolderEntry() }
+    Row(Modifier.fillMaxSize().enterAtFolders(entry), horizontalArrangement = Arrangement.spacedBy(28.dp)) {
         LoadView(cats) { list ->
             if (selected == null) selected = NEW_FOLDER
-            FolderColumn(fixedFolders(withNew = true) + list, selected, { selected = it })
+            FolderColumn(fixedFolders(withNew = true) + list, selected, { selected = it }, entry = entry)
         }
         val sel = selected
         Column(Modifier.weight(1f)) {
@@ -135,10 +136,11 @@ fun MovieGrid(app: VisorApp, nav: Nav, list: List<VodStream>) {
 fun SeriesScreen(app: VisorApp, nav: Nav) {
     val cats = load(app.repo.version) { app.repo.seriesCategories() }
     var selected by rememberSaveable { mutableStateOf<String?>(null) }
-    Row(Modifier.fillMaxSize(), horizontalArrangement = Arrangement.spacedBy(28.dp)) {
+    val entry = remember { FolderEntry() }
+    Row(Modifier.fillMaxSize().enterAtFolders(entry), horizontalArrangement = Arrangement.spacedBy(28.dp)) {
         LoadView(cats) { list ->
             if (selected == null) selected = NEW_FOLDER
-            FolderColumn(fixedFolders(withNew = true) + list, selected, { selected = it })
+            FolderColumn(fixedFolders(withNew = true) + list, selected, { selected = it }, entry = entry)
         }
         val sel = selected
         Column(Modifier.weight(1f)) {

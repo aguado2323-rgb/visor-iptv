@@ -33,6 +33,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import com.visor.tv.data.PlayItem
@@ -175,6 +176,7 @@ private fun Root(app: VisorApp, onExit: () -> Unit) {
 }
 
 @Composable
+@OptIn(androidx.compose.ui.ExperimentalComposeUiApi::class)
 private fun TabsScaffold(app: VisorApp, nav: Nav) {
     val p = LocalPalette.current
     val firstTab = remember { FocusRequester() }
@@ -203,7 +205,10 @@ private fun TabsScaffold(app: VisorApp, nav: Nav) {
                 Spacer(Modifier.height(10.dp))
                 LazyRow(
                     horizontalArrangement = Arrangement.spacedBy(6.dp),
-                    modifier = Modifier.onFocusChanged { tabsFocused = it.hasFocus },
+                    modifier = Modifier
+                        .onFocusChanged { tabsFocused = it.hasFocus }
+                        // Al subir desde el contenido se vuelve a la pestaña en la que estás, no a la más cercana
+                        .focusProperties { enter = { firstTab } },
                 ) {
                     itemsIndexed(Tab.entries.toList()) { i, t ->
                         val active = t == nav.tab

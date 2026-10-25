@@ -28,6 +28,8 @@ data class Recording(
     val file: String = "",
     val bytes: Long = 0,
     val error: String = "",
+    /** Dónde guardarla (índice de almacenamiento); -1 = el de Ajustes. */
+    val storage: Int = -1,
 ) {
     companion object {
         const val REPEAT_ONCE = "once"

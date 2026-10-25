@@ -49,8 +49,8 @@ Most IPTV apps on Fire TV are cluttered and slow. Visor focuses on what you use 
 - **Next episode** card with a 10-second countdown during the credits.
 
 ### Recording
-- One-press **REC** while watching, from the guide, or with a **manual timer** (once, daily, weekdays, weekly) with start and end margins.
-- Saved to internal storage or a USB drive. Each recording uses one extra connection to your provider.
+- One-press **REC** while watching, from the guide, or with a **new timer**: pick any channel, then a show from its guide or exact hours, once, daily, weekdays or weekly, with start and end margins.
+- Choose where each recording is saved: internal storage or a USB drive. Each recording uses one extra connection to your provider.
 
 ### Everything else
 - **Automatic list refresh** every 6 h, 12 h or 24 h, plus *Refresh now*.

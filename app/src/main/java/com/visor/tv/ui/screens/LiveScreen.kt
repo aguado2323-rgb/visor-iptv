@@ -47,9 +47,10 @@ fun LiveScreen(app: VisorApp) {
     var menuFor by remember { mutableStateOf<LiveStream?>(null) }
     var timerFor by remember { mutableStateOf<LiveStream?>(null) }
 
-    Row(Modifier.fillMaxSize(), horizontalArrangement = Arrangement.spacedBy(28.dp)) {
+    val entry = remember { FolderEntry() }
+    Row(Modifier.fillMaxSize().enterAtFolders(entry), horizontalArrangement = Arrangement.spacedBy(28.dp)) {
         LoadView(cats) { list ->
-            FolderColumn(fixedFolders(withNew = false) + list, selected, { selected = it })
+            FolderColumn(fixedFolders(withNew = false) + list, selected, { selected = it }, entry = entry)
         }
         Column(Modifier.weight(1f)) {
             if (selected == SEARCH_FOLDER) {
@@ -76,7 +77,7 @@ fun LiveScreen(app: VisorApp) {
         ChannelActions(app, s, onTimer = { timerFor = s }, onDismiss = { menuFor = null })
     }
     timerFor?.let { s ->
-        TimerDialog(app, s.id, s.name, onDismiss = { timerFor = null })
+        NewTimerDialog(app, onDismiss = { timerFor = null }, presetChannel = s)
     }
 }
 
