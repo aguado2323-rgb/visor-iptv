@@ -85,7 +85,7 @@ class VlcEngine(
         libVlc.release()
     }
 
-        private var aspectMode = com.visor.tv.data.Aspect.FIT
+    private var aspectMode = com.visor.tv.data.Aspect.FIT
     private var attached = false
     private fun applyAspect() {
         if (!attached) return

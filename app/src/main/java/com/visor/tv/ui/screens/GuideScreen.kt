@@ -278,7 +278,6 @@ private fun GuideRow(
     val p = LocalPalette.current
     val windowEnd = windowStart + WINDOW_MIN * 60_000L
     val epg by produceState<List<EpgEntry>?>(null, s.id, windowStart, app.epg.version) {
-        value = null
         delay(200) // al desplazarse rápido no se piden guías que no se van a ver
         value = app.repo.epgRange(s.id, windowStart, windowEnd)
     }
