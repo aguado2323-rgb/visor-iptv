@@ -51,7 +51,7 @@ fun GuideScreen(app: VisorApp) {
     val ctx = LocalContext.current
     val cats = load(app.repo.version) { app.repo.liveCategories() }
     var selected by rememberSaveable { mutableStateOf(FAV_FOLDER) }
-    var info by remember { mutableStateOf<Pair<LiveStream, EpgEntry>?>(null) }
+    var info by remember { mutableStateOf<Pair<LiveStream, EpgEntry?>?>(null) }
     var dialog by remember { mutableStateOf<Pair<LiveStream, EpgEntry>?>(null) }
 
     // La ventana empieza en la media hora anterior y abarca 3 horas.
@@ -69,10 +69,15 @@ fun GuideScreen(app: VisorApp) {
             // Ficha del programa enfocado
             Column(Modifier.fillMaxWidth().height(70.dp)) {
                 val cur = info
-                if (cur != null) {
-                    T("${cur.first.name} · ${hm(cur.second.start)} – ${hm(cur.second.end)}", Type.small, p.muted)
-                    T(cur.second.title, Type.h2)
-                    T(cur.second.desc, Type.small, p.muted, maxLines = 2)
+                val e = cur?.second
+                if (cur != null && e != null) {
+                    T("${cur.first.name} · ${hm(e.start)} – ${hm(e.end)}", Type.small, p.muted)
+                    T(e.title, Type.h2)
+                    T(e.desc, Type.small, p.muted, maxLines = 2)
+                } else if (cur != null) {
+                    T(cur.first.name, Type.small, p.muted)
+                    T("Sin guía", Type.h2)
+                    T("Este canal no tiene programación. OK para verlo.", Type.small, p.muted, maxLines = 2)
                 } else {
                     T("Elige un programa: OK para ver si está en emisión o para grabarlo si es futuro.", Type.small, p.muted, maxLines = 2)
                 }
@@ -103,6 +108,7 @@ fun GuideScreen(app: VisorApp) {
                             itemsIndexed(list, key = { _, s -> s.id }) { i, s ->
                                 GuideRow(app, s, windowStart, chanW, timelineW, dpPerMin,
                                     onFocus = { e -> info = s to e },
+                                    onPlay = { play(ctx, list.map { it.toPlay() }, i) },
                                     onPick = { e ->
                                         if (e.isNow()) play(ctx, list.map { it.toPlay() }, i)
                                         else if (e.start > System.currentTimeMillis()) dialog = s to e
@@ -149,8 +155,9 @@ private fun GuideRow(
     chanW: androidx.compose.ui.unit.Dp,
     timelineW: androidx.compose.ui.unit.Dp,
     dpPerMin: androidx.compose.ui.unit.Dp,
-    onFocus: (EpgEntry) -> Unit,
+    onFocus: (EpgEntry?) -> Unit,
     onPick: (EpgEntry) -> Unit,
+    onPlay: () -> Unit,
 ) {
     val p = LocalPalette.current
     val windowEnd = windowStart + WINDOW_MIN * 60_000L
@@ -164,9 +171,21 @@ private fun GuideRow(
         }
         Box(Modifier.width(timelineW).fillMaxHeight()) {
             val list = epg?.filter { it.end > windowStart && it.start < windowEnd }.orEmpty()
-            if (epg != null && list.isEmpty()) {
-                Box(Modifier.fillMaxSize().clip(RoundedCornerShape(10.dp)).background(p.surface2).padding(horizontal = 10.dp), contentAlignment = Alignment.CenterStart) {
-                    T("Sin guía", Type.small, p.muted)
+            // Sin guía (o mientras carga) la fila sigue siendo enfocable: se puede bajar por ella y OK pone el canal
+            if (list.isEmpty()) {
+                Focusable(
+                    onClick = onPlay,
+                    onFocused = { onFocus(null) },
+                    modifier = Modifier.fillMaxSize(),
+                    shape = RoundedCornerShape(10.dp),
+                ) { focused ->
+                    Box(
+                        Modifier.fillMaxSize().background(if (focused) p.focusBg else p.surface2).padding(horizontal = 10.dp),
+                        contentAlignment = Alignment.CenterStart,
+                    ) {
+                        T(if (epg == null) "Cargando guía…" else if (focused) "Sin guía · OK para ver el canal" else "Sin guía",
+                            Type.small, if (focused) p.focusText else p.muted)
+                    }
                 }
             }
             list.forEach { e ->
