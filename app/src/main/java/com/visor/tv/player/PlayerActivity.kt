@@ -4,6 +4,10 @@ import android.os.Bundle
 import android.view.WindowManager
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
+import androidx.compose.ui.input.key.nativeKeyEvent
+import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -105,6 +109,7 @@ private fun PlayerScreen(app: VisorApp, onExit: () -> Unit) {
     var tracksVersion by remember { mutableStateOf(0) }
     val rootFocus = remember { FocusRequester() }
     val firstButton = remember { FocusRequester() }
+    val seekFocus = remember { FocusRequester() }
     val isLive = item.kind == "live"
 
     val engine: PlayerEngine = remember(engineType) {
@@ -158,7 +163,10 @@ private fun PlayerScreen(app: VisorApp, onExit: () -> Unit) {
     LaunchedEffect(overlay, guide) {
         if (guide) return@LaunchedEffect // la guía coloca el foco en el canal actual
         if (!overlay) try { rootFocus.requestFocus() } catch (_: Exception) { }
-        else try { firstButton.requestFocus() } catch (_: Exception) { }
+        else try {
+            // En películas y series el foco va a la barra de tiempo para poder avanzar enseguida
+            if (!isLive && engine.duration() > 0) seekFocus.requestFocus() else firstButton.requestFocus()
+        } catch (_: Exception) { }
     }
 
     fun jumpTo(i: Int) {
@@ -239,10 +247,9 @@ private fun PlayerScreen(app: VisorApp, onExit: () -> Unit) {
                         ProgressBar(frac)
                     }
                 } else if (dur > 0) {
-                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                        T(fmt(pos), Type.small, p.muted)
-                        Box(Modifier.weight(1f)) { ProgressBar(pos.toFloat() / dur) }
-                        T(fmt(dur), Type.small, p.muted)
+                    SeekBar(pos, dur, seekFocus) { target ->
+                        engine.seekBy(target - engine.position())
+                        pos = target
                     }
                 }
                 if (error != null) {
@@ -405,6 +412,91 @@ private fun TrackRow(label: String, selected: Boolean, fr: FocusRequester?, onCl
         ) {
             T(if (selected) "✓" else "", Type.label, fg, Modifier.width(16.dp))
             T(label, Type.label.copy(fontSize = 15.sp), fg, Modifier.weight(1f), maxLines = 2)
+        }
+    }
+}
+
+
+/**
+ * Barra de tiempo navegable con el mando. Con el foco encima, ← → mueven una marca de destino sin cortar
+ * el vídeo; si mantienes pulsado, cada vez avanza más (10 s → 30 s → 1 min → 5 min). Al soltar, en menos
+ * de un segundo salta ahí; OK salta al momento.
+ */
+@Composable
+private fun SeekBar(pos: Long, dur: Long, fr: FocusRequester, onSeekTo: (Long) -> Unit) {
+    val p = LocalPalette.current
+    var focused by remember { mutableStateOf(false) }
+    var preview by remember { mutableStateOf<Long?>(null) }
+    var stamp by remember { mutableLongStateOf(0L) }
+
+    // Confirma el salto cuando dejas de pulsar
+    LaunchedEffect(stamp) {
+        if (preview == null) return@LaunchedEffect
+        delay(900)
+        preview?.let(onSeekTo)
+        preview = null
+    }
+
+    val shown = preview ?: pos
+    val frac = (shown.toFloat() / dur).coerceIn(0f, 1f)
+    val playedFrac = (pos.toFloat() / dur).coerceIn(0f, 1f)
+
+    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            T(fmt(shown), Type.label, if (preview != null) p.text else p.muted)
+            if (preview != null) {
+                val diff = preview!! - pos
+                T((if (diff >= 0) "+" else "−") + fmt(kotlin.math.abs(diff)), Type.small, p.muted)
+            }
+            Box(Modifier.weight(1f))
+            T(if (focused) "← → para avanzar o retroceder · mantén pulsado para ir más rápido" else "", Type.small, p.muted)
+            T("−" + fmt((dur - shown).coerceAtLeast(0)), Type.small, p.muted)
+        }
+        Box(
+            Modifier
+                .fillMaxWidth()
+                .height(22.dp)
+                .focusRequester(fr)
+                .onFocusChanged { focused = it.isFocused; if (!it.isFocused && preview != null) { onSeekTo(preview!!); preview = null } }
+                .onPreviewKeyEvent { e ->
+                    if (e.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
+                    val rc = e.nativeKeyEvent.repeatCount
+                    val step = when {
+                        rc < 3 -> 10_000L
+                        rc < 10 -> 30_000L
+                        rc < 20 -> 60_000L
+                        else -> 300_000L
+                    }
+                    when (e.key) {
+                        Key.DirectionRight -> { preview = ((preview ?: pos) + step).coerceAtMost(dur - 1000); stamp = System.nanoTime(); true }
+                        Key.DirectionLeft -> { preview = ((preview ?: pos) - step).coerceAtLeast(0); stamp = System.nanoTime(); true }
+                        Key.DirectionCenter, Key.Enter, Key.NumPadEnter -> {
+                            preview?.let(onSeekTo); preview = null; true
+                        }
+                        else -> false
+                    }
+                }
+                .focusable(),
+            contentAlignment = Alignment.CenterStart,
+        ) {
+            val h = if (focused) 8.dp else 4.dp
+            Box(Modifier.fillMaxWidth().height(h).clip(CircleShape).background(p.line)) {
+                // Lo que llevas visto
+                Box(Modifier.fillMaxWidth(playedFrac).height(h).background(p.text.copy(alpha = if (preview != null) 0.45f else 1f)))
+                // Destino mientras eliges
+                if (preview != null) Box(Modifier.fillMaxWidth(frac).height(h).background(p.text))
+            }
+            if (focused) {
+                BoxWithConstraints(Modifier.fillMaxWidth()) {
+                    Box(
+                        Modifier
+                            .offset(x = (maxWidth - 18.dp) * frac)
+                            .size(18.dp)
+                            .clip(CircleShape)
+                            .background(p.text)
+                    )
+                }
+            }
         }
     }
 }
