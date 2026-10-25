@@ -33,12 +33,15 @@ android {
             val props = java.util.Properties()
             val pf = file("signing.properties")
             if (pf.exists()) pf.inputStream().use { props.load(it) }
-            val ks = System.getenv("VISOR_KEYSTORE_PATH")?.let { file(it) } ?: file("visor-release.jks")
+            // GitHub pasa los secretos que no existen como cadena vacía: se tratan como ausentes.
+            fun env(name: String): String? = System.getenv(name)?.takeIf { it.isNotBlank() }
+            val ks = env("VISOR_KEYSTORE_PATH")?.let { file(it) } ?: file("visor-release.jks")
             if (ks.exists()) {
+                val pass = env("VISOR_KEYSTORE_PASSWORD") ?: props.getProperty("visorStorePassword")
                 storeFile = ks
-                storePassword = System.getenv("VISOR_KEYSTORE_PASSWORD") ?: props.getProperty("visorStorePassword")
-                keyAlias = System.getenv("VISOR_KEY_ALIAS") ?: "visor"
-                keyPassword = System.getenv("VISOR_KEY_PASSWORD") ?: System.getenv("VISOR_KEYSTORE_PASSWORD") ?: props.getProperty("visorStorePassword")
+                storePassword = pass
+                keyAlias = env("VISOR_KEY_ALIAS") ?: "visor"
+                keyPassword = env("VISOR_KEY_PASSWORD") ?: pass
             }
         }
     }

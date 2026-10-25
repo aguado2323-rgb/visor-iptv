@@ -41,7 +41,12 @@ jobs:
           TMDB_API_KEY: ${{ secrets.TMDB_API_KEY }}
         run: |
           chmod +x gradlew
-          ./gradlew --no-daemon assembleRelease
+          set -o pipefail
+          ./gradlew --no-daemon assembleRelease 2>&1 | tee build.log || {
+            # Resumen del error como anotación, visible en la página de la ejecución
+            grep -E "^e: |What went wrong|^> |Execution failed|error:" build.log | head -25 | while IFS= read -r l; do echo "::error::$l"; done
+            exit 1
+          }
 
       - uses: actions/upload-artifact@v4
         with:
