@@ -173,9 +173,12 @@ fun ContinueRow(app: VisorApp, nav: Nav, cards: List<ContinueCard>, cardH: Dp) {
                 shape = RoundedCornerShape(14.dp),
                 scaleOnFocus = true,
             ) { focused ->
+                val compact = cardH < 64.dp
                 Row(
-                    Modifier.width(cardH * 3.55f).height(cardH).background(if (focused) p.focusBg else p.surface).padding(8.dp),
+                    Modifier.width((cardH * 3.55f).coerceAtLeast(250.dp)).height(cardH)
+                        .background(if (focused) p.focusBg else p.surface).padding(if (compact) 6.dp else 8.dp),
                     horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    verticalAlignment = Alignment.CenterVertically,
                 ) {
                     Box(Modifier.fillMaxHeight().aspectRatio(16f / 9f).clip(RoundedCornerShape(8.dp))) {
                         Img(c.image, Modifier.fillMaxSize())
@@ -188,6 +191,11 @@ fun ContinueRow(app: VisorApp, nav: Nav, cards: List<ContinueCard>, cardH: Dp) {
                     Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
                         val fg = if (focused) p.focusText else p.text
                         T(c.title, Type.label, fg, maxLines = 1)
+                        if (compact) {
+                            // Tira fina: episodio y tiempo restante en una sola línea
+                            T("${c.sub} · ${c.note}", Type.small, fg.copy(alpha = 0.75f), maxLines = 1)
+                            return@Column
+                        }
                         T(c.sub, Type.small, fg.copy(alpha = 0.75f), maxLines = 1)
                         T(c.note, Type.small.copy(fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold), if (focused) fg else p.muted, Modifier.padding(top = 4.dp), maxLines = 1)
                         if (focused) T("OK reanudar · ≡ más", Type.small, fg.copy(alpha = 0.6f), maxLines = 1)

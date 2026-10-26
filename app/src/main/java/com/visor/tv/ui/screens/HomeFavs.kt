@@ -94,33 +94,39 @@ fun HomeScreen(app: VisorApp, nav: Nav) {
 
     BoxWithConstraints(Modifier.fillMaxSize()) {
         val withCont = cont.isNotEmpty()
-        val fixed = 22.dp + 8.dp + 14.dp + 22.dp + 8.dp + 12.dp + 6.dp + // rótulos, separaciones y márgenes de enfoque
-            (if (withCont) 22.dp + 8.dp + 14.dp + 12.dp else 0.dp)
+        // Con "Seguir viendo", esa fila y la de series pasan a ser tiras finas de altura fija y rótulos
+        // más pequeños: todo el espacio que sobra es para la ficha grande de películas.
+        val labelH = if (withCont) 18.dp else 22.dp
+        val labelGap = if (withCont) 4.dp else 8.dp
+        val sectionGap = if (withCont) 10.dp else 14.dp
+        val labelStyle = if (withCont) Type.label else Type.h2
+        val contH = if (withCont) 52.dp else 0.dp
+        val fixed = if (withCont) (labelH + labelGap) * 3 + sectionGap * 2 + 12.dp + 12.dp + 6.dp // rótulos, huecos y márgenes de enfoque
+            else 22.dp + 8.dp + 14.dp + 22.dp + 8.dp + 12.dp + 6.dp
         val flex = (maxHeight - fixed).coerceAtLeast(240.dp)
-        val contH = if (withCont) (flex * 0.28f).coerceIn(64.dp, 84.dp) else 0.dp
-        val heroH = (flex - contH) * 0.68f
-        val seriesH = (flex - contH) * 0.32f
+        val seriesH = if (withCont) 56.dp else flex * 0.32f
+        val heroH = flex - contH - seriesH
 
         Column(Modifier.fillMaxSize()) {
             if (withCont) {
-                Row(Modifier.height(22.dp), verticalAlignment = Alignment.Bottom) {
-                    T("Seguir viendo", Type.h2)
-                    T("   OK continúa donde lo dejaste · ≡ ver ficha o quitar", Type.small, LocalPalette.current.muted)
+                Row(Modifier.height(labelH), verticalAlignment = Alignment.Bottom) {
+                    T("Seguir viendo", labelStyle)
+                    T("   OK continúa · ≡ ver ficha o quitar", Type.small, LocalPalette.current.muted)
                 }
-                Spacer(Modifier.height(8.dp - 6.dp))
+                Spacer(Modifier.height(labelGap))
                 ContinueRow(app, nav, cont, contH)
-                Spacer(Modifier.height(14.dp - 6.dp))
+                Spacer(Modifier.height(sectionGap))
             }
-            T("Películas nuevas", Type.h2, modifier = Modifier.height(22.dp))
-            Spacer(Modifier.height(8.dp))
+            T("Películas nuevas", labelStyle, modifier = Modifier.height(labelH))
+            Spacer(Modifier.height(labelGap))
             LoadView(movies) { all ->
                 val list = all.take(20)
                 if (list.isEmpty()) Empty("Tu lista no tiene películas nuevas.")
                 else MoviesShowcaseBody(app, nav, list, heroH)
             }
-            Spacer(Modifier.height(14.dp))
-            T("Series nuevas", Type.h2, modifier = Modifier.height(22.dp))
-            Spacer(Modifier.height(8.dp))
+            Spacer(Modifier.height(sectionGap))
+            T("Series nuevas", labelStyle, modifier = Modifier.height(labelH))
+            Spacer(Modifier.height(labelGap))
             LoadView(shows) { all ->
                 val list = all.take(20)
                 if (list.isEmpty()) Empty("Tu lista no tiene series nuevas.")
@@ -216,7 +222,7 @@ private fun MoviesShowcaseBody(app: VisorApp, nav: Nav, list: List<VodStream>, h
 @Composable
 private fun SeriesShelf(app: VisorApp, nav: Nav, list: List<SeriesItem>, cardH: Dp) {
     val p = LocalPalette.current
-    val plotLines = if (cardH >= 100.dp) 3 else 2
+    val plotLines = when { cardH >= 100.dp -> 3; cardH >= 70.dp -> 2; else -> 1 }
     LazyRow(
         modifier = Modifier.height(cardH + 12.dp),
         horizontalArrangement = Arrangement.spacedBy(12.dp),
@@ -231,7 +237,7 @@ private fun SeriesShelf(app: VisorApp, nav: Nav, list: List<SeriesItem>, cardH: 
                 scaleOnFocus = true,
             ) { focused ->
                 Row(
-                    Modifier.width(cardH * 3.2f).height(cardH).background(if (focused) p.focusBg else p.surface).padding(8.dp),
+                    Modifier.width((cardH * 3.2f).coerceAtLeast(240.dp)).height(cardH).background(if (focused) p.focusBg else p.surface).padding(8.dp),
                     horizontalArrangement = Arrangement.spacedBy(10.dp),
                 ) {
                     Img(s.cover, Modifier.fillMaxHeight().aspectRatio(2f / 3f).clip(RoundedCornerShape(8.dp)))
