@@ -63,6 +63,7 @@ import androidx.compose.ui.unit.sp
 import com.visor.tv.Nav
 import com.visor.tv.Route
 import com.visor.tv.VisorApp
+import com.visor.tv.data.displayTitle
 import com.visor.tv.data.ArtSource
 import com.visor.tv.data.Episode
 import com.visor.tv.data.PlayItem
@@ -301,7 +302,7 @@ fun MovieDetail(app: VisorApp, nav: Nav, vod: VodStream) = CompositionLocalProvi
         }
     }.orNull()
 
-    val title = i?.name?.ifBlank { null } ?: vod.name
+    val title = displayTitle(i?.name?.ifBlank { null } ?: vod.name)
     val year = i?.year?.ifBlank { null }?.take(4) ?: vod.year.takeIf { it > 0 }?.toString() ?: tm?.releaseDate?.takeLast(4)
     val duration = pick(tmFirst, i?.duration?.ifBlank { null }?.let { fmtDuration(it) }, minutes(tm?.runtimeMin ?: 0))
     val stars = (if (tmFirst) tm?.rating?.ifBlank { null }?.let { "★ $it" } else null)
@@ -493,7 +494,7 @@ fun SeriesDetail(app: VisorApp, series: SeriesItem) = CompositionLocalProvider(L
     }
     BackHandler(enabled = lower) { backToTop() }
 
-    val title = si?.name?.ifBlank { null } ?: series.name
+    val title = displayTitle(si?.name?.ifBlank { null } ?: series.name)
     val nSeasons = si?.seasons?.size ?: 0
     val stars = (if (tmFirst) tm?.rating?.ifBlank { null }?.let { "★ $it" } else null)
         ?: rating(si?.rating ?: series.rating) ?: tm?.rating?.ifBlank { null }?.let { "★ $it" }

@@ -46,6 +46,8 @@ import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusProperties
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -61,6 +63,7 @@ import androidx.compose.ui.unit.sp
 import com.visor.tv.Nav
 import com.visor.tv.Route
 import com.visor.tv.VisorApp
+import com.visor.tv.data.displayTitle
 import com.visor.tv.data.ArtSource
 import com.visor.tv.data.PlayItem
 import com.visor.tv.data.SeriesItem
@@ -102,19 +105,19 @@ private suspend fun <T> safe(block: suspend () -> T): T? = try {
 }
 
 private fun quickArt(v: VodStream) = HomeArt(
-    key = "mv:${v.id}", title = v.name,
+    key = "mv:${v.id}", title = displayTitle(v.name),
     meta = listOfNotNull("Película", v.year.takeIf { it > 0 }?.toString(), rating(v.rating)).joinToString("  ·  "),
     plot = "", backdrop = null, poster = v.icon, kind = "PELÍCULA",
 )
 
 private fun quickArt(s: SeriesItem) = HomeArt(
-    key = "sr:${s.id}", title = s.name,
+    key = "sr:${s.id}", title = displayTitle(s.name),
     meta = listOfNotNull("Serie", s.year.takeIf { it > 0 }?.toString(), rating(s.rating)).joinToString("  ·  "),
     plot = s.plot, backdrop = null, poster = s.cover, kind = "SERIE",
 )
 
 private fun quickArt(c: ContinueCard) = HomeArt(
-    key = "cw:${c.key}", title = c.title, meta = c.short, plot = c.plot,
+    key = "cw:${c.key}", title = displayTitle(c.title), meta = c.short, plot = c.plot,
     backdrop = c.image.takeIf { c.episode != null || it != c.poster }, poster = c.poster.ifBlank { c.image },
 )
 
@@ -128,7 +131,7 @@ private suspend fun movieArt(app: VisorApp, v: VodStream): HomeArt {
     val stars = rating(i?.rating ?: v.rating) ?: tm?.rating?.ifBlank { null }?.let { "★ $it" }
     return HomeArt(
         key = "mv:${v.id}",
-        title = i?.name?.ifBlank { null } ?: v.name,
+        title = displayTitle(i?.name?.ifBlank { null } ?: v.name),
         meta = listOfNotNull(year, dur, pick(tf, i?.genre, tm?.genres), stars).joinToString("  ·  "),
         plot = pick(tf, i?.plot, tm?.overview).orEmpty(),
         backdrop = pick(tf, i?.backdrop, tm?.backdrop),
@@ -148,7 +151,7 @@ private suspend fun seriesArt(app: VisorApp, s: SeriesItem): HomeArt {
     val stars = rating(si?.rating ?: s.rating) ?: tm?.rating?.ifBlank { null }?.let { "★ $it" }
     return HomeArt(
         key = "sr:${s.id}",
-        title = si?.name?.ifBlank { null } ?: s.name,
+        title = displayTitle(si?.name?.ifBlank { null } ?: s.name),
         meta = listOfNotNull(
             si?.year?.ifBlank { null }?.take(4) ?: s.year.takeIf { it > 0 }?.toString(),
             pick(tf, si?.genre, tm?.genres),
@@ -178,9 +181,9 @@ private fun HomeBackdrop(art: HomeArt?, lowerFrac: Float) {
         }
         Box(Modifier.fillMaxSize().background(Brush.horizontalGradient(0f to Color.Black.copy(alpha = 0.92f), 0.34f to Color.Black.copy(alpha = 0.62f), 0.64f to Color.Transparent)))
         // Arriba el degradado empieza más abajo (portada); al bajar sube, para que las filas se lean
-        val a = 0.45f - 0.23f * lowerFrac
-        val b = 0.72f - 0.27f * lowerFrac
-        val c = 0.88f - 0.28f * lowerFrac
+        val a = 0.45f - 0.10f * lowerFrac
+        val b = 0.72f - 0.10f * lowerFrac
+        val c = 0.88f - 0.08f * lowerFrac
         Box(Modifier.fillMaxSize().background(Brush.verticalGradient(a to Color.Transparent, b to Color.Black.copy(alpha = 0.82f), c to Color.Black)))
         // Sombra para que el menú de arriba se lea sobre cualquier imagen
         Box(Modifier.fillMaxWidth().height(90.dp).background(Brush.verticalGradient(0f to Color.Black.copy(alpha = 0.55f), 1f to Color.Transparent)))
@@ -222,8 +225,9 @@ fun HomeScreen(app: VisorApp, nav: Nav) = CompositionLocalProvider(LocalPalette 
     var lastKey by remember { mutableLongStateOf(0L) }
     var btnIdx by remember { mutableIntStateOf(0) }
     val playBtn = remember { FocusRequester() }
-    val listState = rememberLazyListState()
-    var focusedRow by remember { mutableIntStateOf(0) }
+    // Fila en la que estás: abajo solo se ve esa; al bajar o subir se sustituye por la siguiente
+    var focusedRow by rememberSaveable { mutableIntStateOf(0) }
+    val rowFocus = remember { mapOf("cw" to FocusRequester(), "mv" to FocusRequester(), "sr" to FocusRequester()) }
     var focusItem by remember { mutableStateOf<Any?>(null) }
 
     val cur = featured.getOrNull(featIdx.coerceIn(0, (featured.size - 1).coerceAtLeast(0)))
@@ -256,14 +260,15 @@ fun HomeScreen(app: VisorApp, nav: Nav) = CompositionLocalProvider(LocalPalette 
 
     fun backToTop() {
         lower = false
+        focusedRow = 0
         scope.launch {
-            listState.scrollToItem(0)
             delay(60)
             try { playBtn.requestFocus() } catch (_: Exception) { }
         }
     }
     BackHandler(enabled = lower) { backToTop() }
 
+    val density = androidx.compose.ui.platform.LocalDensity.current
     val lowerFrac by animateFloatAsState(if (lower) 1f else 0f, tween(350), label = "abajo")
 
     Box(Modifier.fillMaxSize()) {
@@ -337,49 +342,66 @@ fun HomeScreen(app: VisorApp, nav: Nav) = CompositionLocalProvider(LocalPalette 
                 }
             }
 
-            // ---- Al bajar: lo seleccionado arriba ----
-            val ra = rowArt
-            if (ra != null) Column(Modifier.padding(start = 48.dp, top = 72.dp).width(560.dp).alpha(lowerFrac)) {
-                TitleArt(ra.title, ra.logo, logoHeight = 52.dp, style = BIG_TITLE.copy(fontSize = 28.sp, lineHeight = 32.sp))
-                Row(Modifier.padding(top = 6.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    if (ra.meta.isNotBlank()) T(ra.meta, META.copy(fontSize = 12.sp), Color(0xFFD6D6D0))
-                    ra.age?.let { Tag(it) }
-                }
-                T(ra.plot.ifBlank { " " }, Type.body.copy(fontSize = 12.5.sp, lineHeight = 18.sp), Color(0xFFE0E0DC), Modifier.padding(top = 6.dp), maxLines = 2, minLines = 2)
-            }
-
-            // ---- Filas: asoman abajo y suben al bajar ----
+            // ---- Abajo: una sola fila, pegada al borde; al bajar, encima la información de lo seleccionado ----
             val rows = buildList { if (cont.isNotEmpty()) add("cw"); if (movies.isNotEmpty()) add("mv"); if (shows.isNotEmpty()) add("sr") }
             if (rows.isNotEmpty()) {
-                val y by animateDpAsState(if (lower) rowsTop else screenH - 150.dp, tween(350), label = "filas")
-                Box(
+                val rowIdx = focusedRow.coerceIn(0, rows.lastIndex)
+                val r = rows[rowIdx]
+                var blockH by remember { mutableStateOf(240.dp) }
+                // En la portada solo asoman el rótulo y el principio de la fila
+                val y by animateDpAsState(if (lower) 0.dp else (blockH - 150.dp).coerceAtLeast(0.dp), tween(350), label = "fila")
+
+                fun switchRow(to: Int) {
+                    focusedRow = to
+                    scope.launch {
+                        delay(40)
+                        try { rowFocus[rows[to]]?.requestFocus() } catch (_: Exception) { }
+                    }
+                }
+
+                Column(
                     Modifier
+                        .align(Alignment.BottomStart)
                         .offset(y = y)
                         .fillMaxWidth()
-                        .height(screenH - rowsTop)
-                        .onFocusChanged { lower = it.hasFocus }
-                        .focusGroup()
+                        .onFocusChanged { if (it.hasFocus) lower = true }
                         .onPreviewKeyEvent { e ->
-                            if (e.type == KeyEventType.KeyDown && e.key == Key.DirectionUp && focusedRow == 0) { backToTop(); true } else false
+                            if (e.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
+                            when (e.key) {
+                                Key.DirectionDown -> { if (rowIdx < rows.lastIndex) switchRow(rowIdx + 1); true }
+                                Key.DirectionUp -> { if (rowIdx > 0) switchRow(rowIdx - 1) else backToTop(); true }
+                                else -> false
+                            }
                         },
                 ) {
-                    LazyColumn(state = listState, verticalArrangement = Arrangement.spacedBy(20.dp), contentPadding = PaddingValues(bottom = 120.dp)) {
-                        itemsIndexed(rows, key = { _, r -> r }) { i, r ->
-                            Column(Modifier.onFocusChanged {
-                                if (it.hasFocus && focusedRow != i) {
-                                    focusedRow = i
-                                    scope.launch { listState.animateScrollToItem(i) }
-                                } else if (it.hasFocus) focusedRow = i
-                            }.focusGroup()) {
-                                val label = when (r) { "cw" -> "Seguir viendo"; "mv" -> "Películas nuevas"; else -> "Series nuevas" }
-                                T(label, SECTION, Color.White.copy(alpha = if (!lower || focusedRow == i) 1f else 0.45f), Modifier.padding(start = 48.dp))
-                                when (r) {
-                                    "cw" -> ContinueRow(app, nav, cont, onFocusCard = { focusItem = it })
-                                    "mv" -> PosterRow(movies.map { it as Any }, nav, app) { focusItem = it }
-                                    else -> PosterRow(shows.map { it as Any }, nav, app) { focusItem = it }
-                                }
+                    val ra = rowArt
+                    if (lower && ra != null) Column(Modifier.padding(start = 48.dp, bottom = 18.dp).width(600.dp).alpha(lowerFrac)) {
+                        TitleArt(ra.title, ra.logo, logoHeight = 60.dp, style = BIG_TITLE.copy(fontSize = 30.sp, lineHeight = 34.sp))
+                        Row(Modifier.padding(top = 6.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            if (ra.meta.isNotBlank()) T(ra.meta, META.copy(fontSize = 12.sp), Color(0xFFD6D6D0))
+                            ra.age?.let { Tag(it) }
+                        }
+                        T(ra.plot.ifBlank { " " }, Type.body.copy(fontSize = 12.5.sp, lineHeight = 18.sp), Color(0xFFE0E0DC), Modifier.padding(top = 6.dp), maxLines = 2, minLines = 2)
+                    }
+                    Column(Modifier.onSizeChanged { blockH = with(density) { it.height.toDp() } }) {
+                        // Rótulo con pistas de las otras filas
+                        fun name(k: String) = when (k) { "cw" -> "Seguir viendo"; "mv" -> "Películas nuevas"; else -> "Series nuevas" }
+                        Row(Modifier.fillMaxWidth().padding(start = 48.dp, end = 48.dp), verticalAlignment = Alignment.CenterVertically) {
+                            T(name(r), SECTION, Color.White, Modifier.weight(1f))
+                            if (lower) {
+                                val hints = listOfNotNull(
+                                    rows.getOrNull(rowIdx - 1)?.let { "↑ " + name(it) },
+                                    rows.getOrNull(rowIdx + 1)?.let { "↓ " + name(it) },
+                                ).joinToString("   ")
+                                T(hints, Type.small, MUTED)
                             }
                         }
+                        when (r) {
+                            "cw" -> ContinueRow(app, nav, cont, onFocusCard = { focusItem = it }, firstItemModifier = Modifier.focusRequester(rowFocus.getValue("cw")))
+                            "mv" -> PosterRow(movies, nav, app, Modifier.focusRequester(rowFocus.getValue("mv"))) { focusItem = it }
+                            else -> PosterRow(shows, nav, app, Modifier.focusRequester(rowFocus.getValue("sr"))) { focusItem = it }
+                        }
+                        Spacer(Modifier.height(14.dp))
                     }
                 }
             }
@@ -389,17 +411,18 @@ fun HomeScreen(app: VisorApp, nav: Nav) = CompositionLocalProvider(LocalPalette 
 
 /** Fila de carátulas (películas o series nuevas). */
 @Composable
-private fun PosterRow(items: List<Any>, nav: Nav, app: VisorApp, onFocus: (Any) -> Unit) {
+private fun PosterRow(items: List<Any>, nav: Nav, app: VisorApp, firstItemModifier: Modifier, onFocus: (Any) -> Unit) {
     LazyRow(
         horizontalArrangement = Arrangement.spacedBy(16.dp),
         contentPadding = PaddingValues(start = 48.dp, end = 48.dp, top = 12.dp, bottom = 4.dp),
     ) {
-        itemsIndexed(items, key = { _, it -> if (it is VodStream) "v${it.id}" else "s${(it as SeriesItem).id}" }) { _, it ->
+        itemsIndexed(items, key = { _, it -> if (it is VodStream) "v${it.id}" else "s${(it as SeriesItem).id}" }) { idx, it ->
+            val m = if (idx == 0) firstItemModifier else Modifier
             when (it) {
                 is VodStream -> {
                     val k = "home:mv:${it.id}"
                     Poster(
-                        url = it.icon, title = it.name, width = 108.dp,
+                        url = it.icon, title = displayTitle(it.name), width = 108.dp, modifier = m,
                         onClick = { nav.open(Route.Movie(it), k) },
                         onMenu = { app.favorites.toggle(it.toFav()) },
                         onFocused = { onFocus(it) },
@@ -409,7 +432,7 @@ private fun PosterRow(items: List<Any>, nav: Nav, app: VisorApp, onFocus: (Any) 
                 is SeriesItem -> {
                     val k = "home:sr:${it.id}"
                     Poster(
-                        url = it.cover, title = it.name, width = 108.dp,
+                        url = it.cover, title = displayTitle(it.name), width = 108.dp, modifier = m,
                         onClick = { nav.open(Route.Show(it), k) },
                         onMenu = { app.favorites.toggle(it.toFav()) },
                         onFocused = { onFocus(it) },

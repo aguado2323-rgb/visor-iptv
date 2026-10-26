@@ -204,6 +204,24 @@ fun cleanTitle(name: String): String {
     return t.replace(CT_SPACES, " ").trim().trimEnd('-', ':').trim()
 }
 
+/**
+ * Título para mostrar: sin etiquetas entre corchetes ("[4K]", "[ES]", "|ES|"), sin prefijos de idioma o
+ * calidad ("ES - ", "4K - ") y sin el año entre paréntesis. Si no quedara nada, el nombre tal cual.
+ */
+fun displayTitle(name: String): String {
+    var t = name.replace(DT_TAGS, " ")
+    t = t.replace(DT_PREFIX, "")
+    t = t.replace(DT_YEAR, " ")
+    t = t.replace(DT_YEAR_TAIL, "")
+    t = t.replace(CT_SPACES, " ").trim().trimEnd('-', ':', '|').trim()
+    return t.ifBlank { name.trim() }
+}
+
+private val DT_TAGS = Regex("""\[[^\]]{0,20}\]|\|[^|]{1,12}\|""")
+private val DT_PREFIX = Regex("""^\s*(?:[A-Z0-9]{2,4}\s*[-:|]\s+)+""")
+private val DT_YEAR = Regex("""\(\s*(?:19|20)\d{2}\s*\)""")
+private val DT_YEAR_TAIL = Regex("""\s+[-–]\s*(?:19|20)\d{2}\s*$""")
+
 // Compiladas una sola vez (cleanTitle se usa con toda la lista de películas)
 private val CT_PREFIX = Regex("""^\s*(\[[^\]]{1,12}\]|\|[^|]{1,12}\||[A-Z]{2,4}\s*[-:|]\s+)+""")
 private val CT_YEAR_PAREN = Regex("""[\[(]\s*(19|20)\d{2}\s*[\])]""")

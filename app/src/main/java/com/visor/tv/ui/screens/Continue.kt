@@ -18,7 +18,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyRow
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -36,6 +36,7 @@ import androidx.compose.ui.unit.dp
 import com.visor.tv.Nav
 import com.visor.tv.Route
 import com.visor.tv.VisorApp
+import com.visor.tv.data.displayTitle
 import com.visor.tv.data.Episode
 import com.visor.tv.data.PlayItem
 import com.visor.tv.data.SeriesInfo
@@ -161,7 +162,8 @@ suspend fun buildContinue(app: VisorApp, max: Int = 10): List<ContinueCard> {
 fun ContinueRow(
     app: VisorApp, nav: Nav, cards: List<ContinueCard>,
     onFocusCard: (ContinueCard) -> Unit = {},
-    itemModifier: Modifier = Modifier,
+    /** Solo para la primera tarjeta (para poder llevar el foco a esta fila). */
+    firstItemModifier: Modifier = Modifier,
 ) {
     val ctx = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -184,7 +186,7 @@ fun ContinueRow(
         horizontalArrangement = Arrangement.spacedBy(18.dp),
         contentPadding = PaddingValues(start = 48.dp, end = 48.dp, top = 8.dp, bottom = 4.dp),
     ) {
-        items(cards, key = { it.key }) { c ->
+        itemsIndexed(cards, key = { _, it -> it.key }) { idx, c ->
             Column(Modifier.width(200.dp)) {
                 Focusable(
                     onClick = { resume(c) },
@@ -193,7 +195,7 @@ fun ContinueRow(
                     focusRequester = rememberReturnFocus(nav, "home:cw:${c.key}"),
                     shape = RoundedCornerShape(10.dp),
                     scaleOnFocus = true,
-                    modifier = itemModifier,
+                    modifier = if (idx == 0) firstItemModifier else Modifier,
                 ) { focused ->
                     Box(
                         Modifier.fillMaxWidth().aspectRatio(16f / 9f)
@@ -211,7 +213,7 @@ fun ContinueRow(
                         }
                     }
                 }
-                T(c.title, Type.label, Color.White, Modifier.padding(top = 7.dp), maxLines = 1)
+                T(displayTitle(c.title), Type.label, Color.White, Modifier.padding(top = 7.dp), maxLines = 1)
                 T(c.short, Type.small, Color(0xFF9A9DA3), maxLines = 1)
             }
         }
