@@ -74,6 +74,8 @@ data class ContinueCard(
     val episode: Episode? = null,
     val season: Int = 0,
     val route: Route,
+    /** Una sola línea para la tira fina: "T2 · E3 · quedan 18 min", "Siguiente: T1 · E7"… */
+    val short: String = sub,
 )
 
 private fun left(ms: Long): String {
@@ -107,7 +109,7 @@ suspend fun buildContinue(app: VisorApp, max: Int = 10): List<ContinueCard> {
                 out += ContinueCard(
                     key = it.key, title = it.title, sub = listOfNotNull("Película", info?.year?.ifBlank { null }).joinToString(" · "),
                     note = left(e.durationMs - e.positionMs), frac = e.positionMs.toFloat() / e.durationMs,
-                    image = info?.backdrop?.ifBlank { null } ?: it.icon, item = it,
+                    image = info?.backdrop?.ifBlank { null } ?: it.icon, item = it, short = left(e.durationMs - e.positionMs),
                     route = Route.Movie(VodStream(id = it.id, name = it.title, icon = it.icon, rating = "", ext = it.ext, categoryId = "")),
                 )
             }
@@ -122,7 +124,7 @@ suspend fun buildContinue(app: VisorApp, max: Int = 10): List<ContinueCard> {
                     out += ContinueCard(
                         key = "s:${it.seriesId}", title = name, sub = "Siguiente: T${next.season} · E${next.num}",
                         note = "Episodio nuevo", frac = 0f, image = next.image.ifBlank { si.backdrop.ifBlank { si.cover } },
-                        item = it, episode = next, season = next.season, route = Route.Show(show),
+                        item = it, episode = next, season = next.season, route = Route.Show(show), short = "Siguiente: T${next.season} · E${next.num}",
                     )
                 } else {
                     val ep = si.seasons.values.flatten().firstOrNull { x -> x.id == it.id } ?: continue
@@ -131,6 +133,7 @@ suspend fun buildContinue(app: VisorApp, max: Int = 10): List<ContinueCard> {
                         note = left(e.durationMs - e.positionMs), frac = e.positionMs.toFloat() / e.durationMs,
                         image = ep.image.ifBlank { si.backdrop.ifBlank { si.cover } },
                         item = it, episode = ep, season = ep.season, route = Route.Show(show),
+                        short = "T${ep.season} · E${ep.num} · " + left(e.durationMs - e.positionMs).replaceFirstChar { c -> c.lowercase() },
                     )
                 }
             }
@@ -175,7 +178,7 @@ fun ContinueRow(app: VisorApp, nav: Nav, cards: List<ContinueCard>, cardH: Dp) {
             ) { focused ->
                 val compact = cardH < 64.dp
                 Row(
-                    Modifier.width((cardH * 3.55f).coerceAtLeast(250.dp)).height(cardH)
+                    Modifier.width((cardH * 3.55f).coerceAtLeast(260.dp)).height(cardH)
                         .background(if (focused) p.focusBg else p.surface).padding(if (compact) 6.dp else 8.dp),
                     horizontalArrangement = Arrangement.spacedBy(10.dp),
                     verticalAlignment = Alignment.CenterVertically,
@@ -193,7 +196,7 @@ fun ContinueRow(app: VisorApp, nav: Nav, cards: List<ContinueCard>, cardH: Dp) {
                         T(c.title, Type.label, fg, maxLines = 1)
                         if (compact) {
                             // Tira fina: episodio y tiempo restante en una sola línea
-                            T("${c.sub} · ${c.note}", Type.small, fg.copy(alpha = 0.75f), maxLines = 1)
+                            T(c.short, Type.small, fg.copy(alpha = 0.75f), maxLines = 1)
                             return@Column
                         }
                         T(c.sub, Type.small, fg.copy(alpha = 0.75f), maxLines = 1)
