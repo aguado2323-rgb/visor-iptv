@@ -39,9 +39,9 @@ Most IPTV apps on Fire TV are cluttered and slow. Visor focuses on what you use 
 - Your provider's folders, plus **✦ Latest** (the 30 most recent additions) and **★ Favorites**.
 - **Search** across the whole list, not just one folder. It ignores accents and case and matches several words.
 - **Sort** any folder: recently added, oldest, release year (newest or oldest), A–Z or Z–A. Your choice is remembered.
-- **Full-screen detail pages:**
-  - **Movies:** original title, country, age rating, picture and sound quality (4K, HDR, 5.1…), cast, director, trailer, and *Continue* with time left.
-  - **Series:** *Continue S2 · E3* from where you left off, seasons, and episode thumbnails with progress.
+- **Cinematic detail pages** (always dark, artwork full screen) with two levels: the title on top; press **↓** for the rest.
+  - **Movies:** one big *Continue* button with the progress inside, plus *From the start*, *Trailer* and *My list*. Below: the full synopsis, credits (director, cast, original title, country, release, picture and sound) and **More from this folder**.
+  - **Series:** *Continue S2 · E3* or *Next S2 · E4*. Below: seasons as tabs and large episode cards with number, progress, duration and their own synopsis.
 - **Back returns to the same poster**, so you keep browsing where you were.
 - Artwork from your provider by default, or TMDB.
 
