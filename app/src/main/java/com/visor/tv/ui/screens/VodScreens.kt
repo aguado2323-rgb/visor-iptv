@@ -47,7 +47,6 @@ import com.visor.tv.data.Category
 import com.visor.tv.data.FavItem
 import com.visor.tv.data.PlayItem
 import com.visor.tv.data.SeriesItem
-import com.visor.tv.data.TmdbArt
 import com.visor.tv.data.VodStream
 import com.visor.tv.play
 import com.visor.tv.ui.Empty
