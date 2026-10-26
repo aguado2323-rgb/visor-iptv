@@ -83,22 +83,22 @@ import kotlinx.coroutines.launch
 // Tienen dos estados: arriba la ficha completa; al bajar, la cabecera se encoge y manda el contenido de abajo
 // (episodios en series; detalles y más títulos en películas). ↑ o Atrás vuelven a la ficha completa.
 
-private val EYEBROW = Type.small.copy(fontWeight = FontWeight.SemiBold, letterSpacing = 2.sp)
-private val BIG_TITLE = Type.title.copy(fontSize = 40.sp, lineHeight = 44.sp, fontWeight = FontWeight.ExtraBold, letterSpacing = (-1).sp)
+internal val EYEBROW = Type.small.copy(fontWeight = FontWeight.SemiBold, letterSpacing = 2.sp)
+internal val BIG_TITLE = Type.title.copy(fontSize = 40.sp, lineHeight = 44.sp, fontWeight = FontWeight.ExtraBold, letterSpacing = (-1).sp)
 private val SMALL_TITLE = Type.title.copy(fontSize = 24.sp, fontWeight = FontWeight.ExtraBold, letterSpacing = (-0.5).sp)
-private val META = Type.body.copy(fontSize = 13.sp)
-private val SYNOPSIS = Type.body.copy(fontSize = 14.sp, lineHeight = 20.sp)
-private val SECTION = Type.h2.copy(fontSize = 15.sp)
-private val MUTED = Color(0xFF9A9DA3)
+internal val META = Type.body.copy(fontSize = 13.sp)
+internal val SYNOPSIS = Type.body.copy(fontSize = 14.sp, lineHeight = 20.sp)
+internal val SECTION = Type.h2.copy(fontSize = 15.sp)
+internal val MUTED = Color(0xFF9A9DA3)
 
 /** Proveedor o TMDB, según qué fuente mande en Ajustes; la otra rellena lo que falte. */
-private fun pick(tmdbFirst: Boolean, provider: String?, tmdb: String?): String? {
+internal fun pick(tmdbFirst: Boolean, provider: String?, tmdb: String?): String? {
     val a = provider?.trim()?.ifBlank { null }
     val b = tmdb?.trim()?.ifBlank { null }
     return if (tmdbFirst) b ?: a else a ?: b
 }
 
-private fun minutes(m: Int): String? = when { m <= 0 -> null; m >= 60 -> "${m / 60} h ${m % 60} min"; else -> "$m min" }
+internal fun minutes(m: Int): String? = when { m <= 0 -> null; m >= 60 -> "${m / 60} h ${m % 60} min"; else -> "$m min" }
 
 /** Títulos de episodio que no dicen nada ("Episodio 3", "S01E03", el nombre de la serie…). */
 private val GENERIC_EP = Regex("""(?i)^(episod(e|io)|cap[ií]tulo|cap\.?|ep\.?)\s*\d+$""")
@@ -113,7 +113,12 @@ private fun genericEpisodeTitle(t: String, num: Int, series: String): Boolean {
 
 /** Título: el logotipo de TMDB si lo hay (como en las plataformas), o el texto grande. */
 @Composable
-private fun TitleArt(title: String, logo: String?) {
+internal fun TitleArt(
+    title: String,
+    logo: String?,
+    logoHeight: androidx.compose.ui.unit.Dp = 88.dp,
+    style: androidx.compose.ui.text.TextStyle = BIG_TITLE,
+) {
     var failed by remember(logo) { mutableStateOf(false) }
     var loaded by remember(logo) { mutableStateOf(false) }
     if (!logo.isNullOrBlank() && !failed) {
@@ -124,10 +129,10 @@ private fun TitleArt(title: String, logo: String?) {
             alignment = Alignment.CenterStart,
             onSuccess = { loaded = true },
             onError = { failed = true },
-            modifier = Modifier.height(if (loaded) 88.dp else 0.dp).widthIn(max = 420.dp).fillMaxWidth(),
+            modifier = Modifier.height(if (loaded) logoHeight else 0.dp).widthIn(max = 420.dp).fillMaxWidth(),
         )
     }
-    if (logo.isNullOrBlank() || failed || !loaded) T(title, BIG_TITLE, Color.White, maxLines = 2)
+    if (logo.isNullOrBlank() || failed || !loaded) T(title, style, Color.White, maxLines = 2)
 }
 
 private fun hms(ms: Long): String {
@@ -136,7 +141,7 @@ private fun hms(ms: Long): String {
 }
 
 /** "00:52:10" → "52 min"; lo demás tal cual. */
-private fun fmtDuration(s: String): String {
+internal fun fmtDuration(s: String): String {
     val parts = s.trim().split(":").mapNotNull { it.toIntOrNull() }
     if (parts.size < 2) return s.trim()
     val min = if (parts.size == 3) parts[0] * 60 + parts[1] else parts[0]
@@ -177,7 +182,7 @@ private fun CinemaBackdrop(backdrop: String?, poster: String, lower: Boolean) {
 
 /** Botón principal: blanco y grande al enfocarlo, con la barra de progreso dentro si está a medias. */
 @Composable
-private fun PrimaryAction(text: String, progress: Float?, focusRequester: FocusRequester, canFocus: Boolean, onClick: () -> Unit) {
+internal fun PrimaryAction(text: String, progress: Float?, focusRequester: FocusRequester, canFocus: Boolean, onClick: () -> Unit) {
     Focusable(
         onClick = onClick,
         focusRequester = focusRequester,
@@ -202,7 +207,7 @@ private fun PrimaryAction(text: String, progress: Float?, focusRequester: FocusR
 
 /** Acción secundaria: icono redondo con su nombre debajo. */
 @Composable
-private fun RoundAction(icon: String, label: String, canFocus: Boolean, onClick: () -> Unit) {
+internal fun RoundAction(icon: String, label: String, canFocus: Boolean, onClick: () -> Unit) {
     Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(5.dp), modifier = Modifier.width(76.dp)) {
         Focusable(
             onClick = onClick,
@@ -221,7 +226,7 @@ private fun RoundAction(icon: String, label: String, canFocus: Boolean, onClick:
 
 /** Etiqueta con borde: 4K, HDR, 5.1, edad… */
 @Composable
-private fun Tag(text: String) {
+internal fun Tag(text: String) {
     Box(Modifier.border(1.dp, Color.White.copy(alpha = 0.45f), RoundedCornerShape(5.dp)).padding(horizontal = 6.dp, vertical = 1.dp)) {
         T(text, Type.small.copy(fontSize = 10.sp, fontWeight = FontWeight.SemiBold), Color.White)
     }

@@ -36,6 +36,8 @@ import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import androidx.compose.ui.layout.onSizeChanged
 import com.visor.tv.data.PlayItem
 import com.visor.tv.data.SeriesItem
 import com.visor.tv.data.VodStream
@@ -223,51 +225,17 @@ private fun TabsScaffold(app: VisorApp, nav: Nav) {
         try { firstTab.requestFocus() } catch (_: Exception) { }
     }
 
-    Column(Modifier.fillMaxSize().padding(start = 40.dp, end = 40.dp, top = 28.dp)) {
-        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.Top) {
-            Column(Modifier.weight(1f)) {
-                T(nav.tab.label, Type.title)
-                Spacer(Modifier.height(10.dp))
-                LazyRow(
-                    horizontalArrangement = Arrangement.spacedBy(6.dp),
-                    modifier = Modifier
-                        .onFocusChanged { tabsFocused = it.hasFocus }
-                        // Al subir desde el contenido se vuelve a la pestaña en la que estás, no a la más cercana
-                        .focusProperties { enter = { firstTab } },
-                ) {
-                    itemsIndexed(Tab.entries.toList()) { i, t ->
-                        val active = t == nav.tab
-                        Focusable(
-                            onClick = { nav.tab = t },
-                            onFocused = { nav.tab = t },
-                            focusRequester = if (i == nav.tab.ordinal) firstTab else null,
-                            shape = androidx.compose.foundation.shape.RoundedCornerShape(10.dp),
-                        ) { focused ->
-                            Column(
-                                Modifier
-                                    .background(if (focused) p.focusBg else Color.Transparent)
-                                    .padding(horizontal = 12.dp, vertical = 6.dp),
-                                horizontalAlignment = Alignment.CenterHorizontally,
-                            ) {
-                                T(t.label, Type.tab, if (focused) p.focusText else if (active) p.text else p.muted)
-                                Spacer(Modifier.height(3.dp))
-                                Box(Modifier.width(18.dp).height(2.dp).background(if (active && !focused) p.text else Color.Transparent))
-                            }
-                        }
-                    }
-                }
-            }
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                MiniPlayer.item?.let { mini ->
-                    val ctx = androidx.compose.ui.platform.LocalContext.current
-                    TvButton("⛶ ${mini.title}", onClick = { MiniPlayer.expand(ctx) })
-                    TvButton("✕", onClick = { MiniPlayer.stop() })
-                }
-                T(now, Type.h2)
-            }
-        }
-        Spacer(Modifier.height(18.dp))
-        Box(Modifier.fillMaxSize()) {
+    // Inicio va a pantalla completa con el menú encima (fino y siempre oscuro); el resto, debajo de la cabecera.
+    val home = nav.tab == Tab.HOME
+    val density = androidx.compose.ui.platform.LocalDensity.current
+    var headerH by remember { mutableStateOf(130.dp) }
+
+    Box(Modifier.fillMaxSize()) {
+        Box(
+            Modifier
+                .fillMaxSize()
+                .then(if (home) Modifier else Modifier.padding(start = 40.dp, end = 40.dp, top = headerH))
+        ) {
             when (nav.tab) {
                 Tab.HOME -> HomeScreen(app, nav)
                 Tab.LIVE -> LiveScreen(app)
@@ -277,6 +245,74 @@ private fun TabsScaffold(app: VisorApp, nav: Nav) {
                 Tab.FAVS -> FavoritesScreen(app, nav)
                 Tab.REC -> RecordingsScreen(app)
                 Tab.SETTINGS -> SettingsScreen(app, nav)
+            }
+        }
+
+        androidx.compose.runtime.CompositionLocalProvider(LocalPalette provides if (home) com.visor.tv.ui.OledPalette else p) {
+            val hp = LocalPalette.current
+            Row(
+                Modifier
+                    .fillMaxWidth()
+                    .onSizeChanged { if (!home) headerH = with(density) { it.height.toDp() } + 18.dp }
+                    .padding(start = if (home) 44.dp else 40.dp, end = if (home) 48.dp else 40.dp, top = if (home) 20.dp else 28.dp),
+                verticalAlignment = Alignment.Top,
+            ) {
+                Column(Modifier.weight(1f)) {
+                    if (!home) {
+                        T(nav.tab.label, Type.title)
+                        Spacer(Modifier.height(10.dp))
+                    }
+                    LazyRow(
+                        horizontalArrangement = Arrangement.spacedBy(if (home) 4.dp else 6.dp),
+                        modifier = Modifier
+                            .onFocusChanged { tabsFocused = it.hasFocus }
+                            // Al subir desde el contenido se vuelve a la pestaña en la que estás, no a la más cercana
+                            .focusProperties { enter = { firstTab } },
+                    ) {
+                        itemsIndexed(Tab.entries.toList()) { i, t ->
+                            val active = t == nav.tab
+                            Focusable(
+                                onClick = { nav.tab = t },
+                                onFocused = { nav.tab = t },
+                                focusRequester = if (i == nav.tab.ordinal) firstTab else null,
+                                shape = androidx.compose.foundation.shape.RoundedCornerShape(if (home) 50 else 20),
+                            ) { focused ->
+                                if (home) {
+                                    // Menú fino sobre la imagen: píldora para la pestaña activa
+                                    Box(
+                                        Modifier
+                                            .background(if (focused) Color.White else if (active) Color.White.copy(alpha = 0.16f) else Color.Transparent)
+                                            .padding(horizontal = 12.dp, vertical = 5.dp)
+                                    ) {
+                                        T(
+                                            t.label, Type.tab.copy(fontSize = 13.sp),
+                                            if (focused) Color.Black else if (active) Color.White else Color.White.copy(alpha = 0.72f),
+                                        )
+                                    }
+                                } else {
+                                    Column(
+                                        Modifier
+                                            .background(if (focused) hp.focusBg else Color.Transparent)
+                                            .padding(horizontal = 12.dp, vertical = 6.dp),
+                                        horizontalAlignment = Alignment.CenterHorizontally,
+                                    ) {
+                                        T(t.label, Type.tab, if (focused) hp.focusText else if (active) hp.text else hp.muted)
+                                        Spacer(Modifier.height(3.dp))
+                                        Box(Modifier.width(18.dp).height(2.dp).background(if (active && !focused) hp.text else Color.Transparent))
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    MiniPlayer.item?.let { mini ->
+                        val ctx = androidx.compose.ui.platform.LocalContext.current
+                        TvButton("⛶ ${mini.title}", onClick = { MiniPlayer.expand(ctx) })
+                        TvButton("✕", onClick = { MiniPlayer.stop() })
+                    }
+                    T(now, if (home) Type.label.copy(fontSize = 14.sp) else Type.h2, if (home) Color.White else hp.text)
+                }
             }
         }
     }

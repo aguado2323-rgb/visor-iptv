@@ -1,6 +1,10 @@
 package com.visor.tv.ui.screens
 
 import androidx.compose.foundation.background
+import androidx.compose.ui.unit.sp
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -76,6 +80,10 @@ data class ContinueCard(
     val route: Route,
     /** Una sola línea para la tira fina: "T2 · E3 · quedan 18 min", "Siguiente: T1 · E7"… */
     val short: String = sub,
+    /** Sinopsis (de la película o del episodio), para la parte de arriba de Inicio. */
+    val plot: String = "",
+    /** Carátula vertical, por si no hay imagen apaisada. */
+    val poster: String = "",
 )
 
 private fun left(ms: Long): String {
@@ -110,6 +118,7 @@ suspend fun buildContinue(app: VisorApp, max: Int = 10): List<ContinueCard> {
                     key = it.key, title = it.title, sub = listOfNotNull("Película", info?.year?.ifBlank { null }).joinToString(" · "),
                     note = left(e.durationMs - e.positionMs), frac = e.positionMs.toFloat() / e.durationMs,
                     image = info?.backdrop?.ifBlank { null } ?: it.icon, item = it, short = left(e.durationMs - e.positionMs),
+                    plot = info?.plot.orEmpty(), poster = info?.cover?.ifBlank { null } ?: it.icon,
                     route = Route.Movie(VodStream(id = it.id, name = it.title, icon = it.icon, rating = "", ext = it.ext, categoryId = "")),
                 )
             }
@@ -125,6 +134,7 @@ suspend fun buildContinue(app: VisorApp, max: Int = 10): List<ContinueCard> {
                         key = "s:${it.seriesId}", title = name, sub = "Siguiente: T${next.season} · E${next.num}",
                         note = "Episodio nuevo", frac = 0f, image = next.image.ifBlank { si.backdrop.ifBlank { si.cover } },
                         item = it, episode = next, season = next.season, route = Route.Show(show), short = "Siguiente: T${next.season} · E${next.num}",
+                        plot = next.plot.ifBlank { si.plot }, poster = si.cover,
                     )
                 } else {
                     val ep = si.seasons.values.flatten().firstOrNull { x -> x.id == it.id } ?: continue
@@ -134,6 +144,7 @@ suspend fun buildContinue(app: VisorApp, max: Int = 10): List<ContinueCard> {
                         image = ep.image.ifBlank { si.backdrop.ifBlank { si.cover } },
                         item = it, episode = ep, season = ep.season, route = Route.Show(show),
                         short = "T${ep.season} · E${ep.num} · " + left(e.durationMs - e.positionMs).replaceFirstChar { c -> c.lowercase() },
+                        plot = ep.plot.ifBlank { si.plot }, poster = si.cover,
                     )
                 }
             }
@@ -142,10 +153,16 @@ suspend fun buildContinue(app: VisorApp, max: Int = 10): List<ContinueCard> {
     return out
 }
 
-/** Fila "Seguir viendo" de Inicio. OK reanuda donde lo dejaste; ≡ ver ficha o quitar. */
+/**
+ * Fila "Seguir viendo" de Inicio: miniaturas apaisadas con su barra de progreso.
+ * OK reanuda donde lo dejaste; ≡ ver ficha o quitar. [onFocusCard] avisa para cambiar el fondo.
+ */
 @Composable
-fun ContinueRow(app: VisorApp, nav: Nav, cards: List<ContinueCard>, cardH: Dp) {
-    val p = LocalPalette.current
+fun ContinueRow(
+    app: VisorApp, nav: Nav, cards: List<ContinueCard>,
+    onFocusCard: (ContinueCard) -> Unit = {},
+    itemModifier: Modifier = Modifier,
+) {
     val ctx = LocalContext.current
     val scope = rememberCoroutineScope()
     var menuFor by remember { mutableStateOf<ContinueCard?>(null) }
@@ -164,46 +181,38 @@ fun ContinueRow(app: VisorApp, nav: Nav, cards: List<ContinueCard>, cardH: Dp) {
     }
 
     LazyRow(
-        modifier = Modifier.height(cardH + 12.dp),
-        horizontalArrangement = Arrangement.spacedBy(12.dp),
-        contentPadding = PaddingValues(horizontal = 6.dp, vertical = 6.dp),
+        horizontalArrangement = Arrangement.spacedBy(18.dp),
+        contentPadding = PaddingValues(start = 48.dp, end = 48.dp, top = 8.dp, bottom = 4.dp),
     ) {
         items(cards, key = { it.key }) { c ->
-            Focusable(
-                onClick = { resume(c) },
-                onMenu = { menuFor = c },
-                focusRequester = rememberReturnFocus(nav, "home:cw:${c.key}"),
-                shape = RoundedCornerShape(14.dp),
-                scaleOnFocus = true,
-            ) { focused ->
-                val compact = cardH < 64.dp
-                Row(
-                    Modifier.width((cardH * 3.55f).coerceAtLeast(260.dp)).height(cardH)
-                        .background(if (focused) p.focusBg else p.surface).padding(if (compact) 6.dp else 8.dp),
-                    horizontalArrangement = Arrangement.spacedBy(10.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Box(Modifier.fillMaxHeight().aspectRatio(16f / 9f).clip(RoundedCornerShape(8.dp))) {
-                        Img(c.image, Modifier.fillMaxSize())
+            Column(Modifier.width(200.dp)) {
+                Focusable(
+                    onClick = { resume(c) },
+                    onMenu = { menuFor = c },
+                    onFocused = { onFocusCard(c) },
+                    focusRequester = rememberReturnFocus(nav, "home:cw:${c.key}"),
+                    shape = RoundedCornerShape(10.dp),
+                    scaleOnFocus = true,
+                    modifier = itemModifier,
+                ) { focused ->
+                    Box(
+                        Modifier.fillMaxWidth().aspectRatio(16f / 9f)
+                            .border(if (focused) 3.dp else 0.dp, if (focused) Color.White else Color.Transparent, RoundedCornerShape(10.dp))
+                    ) {
+                        Img(c.image, Modifier.fillMaxSize().clip(RoundedCornerShape(10.dp)))
                         if (c.frac > 0f) {
-                            Box(Modifier.align(Alignment.BottomStart).fillMaxWidth().height(4.dp).background(Color.White.copy(alpha = 0.35f))) {
-                                Box(Modifier.fillMaxWidth(c.frac.coerceIn(0f, 1f)).height(4.dp).background(Color.White))
+                            Box(Modifier.align(Alignment.BottomCenter).padding(horizontal = 8.dp, vertical = 8.dp).fillMaxWidth().height(3.dp).clip(CircleShape).background(Color.White.copy(alpha = 0.3f))) {
+                                Box(Modifier.fillMaxWidth(c.frac.coerceIn(0f, 1f)).height(3.dp).background(Color.White))
+                            }
+                        } else if (c.episode != null) {
+                            Box(Modifier.align(Alignment.TopStart).padding(7.dp).clip(RoundedCornerShape(4.dp)).background(Color.White).padding(horizontal = 6.dp, vertical = 1.dp)) {
+                                T("NUEVO EPISODIO", Type.small.copy(fontSize = 9.sp, fontWeight = FontWeight.Bold), Color.Black)
                             }
                         }
                     }
-                    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                        val fg = if (focused) p.focusText else p.text
-                        T(c.title, Type.label, fg, maxLines = 1)
-                        if (compact) {
-                            // Tira fina: episodio y tiempo restante en una sola línea
-                            T(c.short, Type.small, fg.copy(alpha = 0.75f), maxLines = 1)
-                            return@Column
-                        }
-                        T(c.sub, Type.small, fg.copy(alpha = 0.75f), maxLines = 1)
-                        T(c.note, Type.small.copy(fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold), if (focused) fg else p.muted, Modifier.padding(top = 4.dp), maxLines = 1)
-                        if (focused) T("OK reanudar · ≡ más", Type.small, fg.copy(alpha = 0.6f), maxLines = 1)
-                    }
                 }
+                T(c.title, Type.label, Color.White, Modifier.padding(top = 7.dp), maxLines = 1)
+                T(c.short, Type.small, Color(0xFF9A9DA3), maxLines = 1)
             }
         }
     }
