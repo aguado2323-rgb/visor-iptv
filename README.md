@@ -22,10 +22,11 @@ Most IPTV apps on Fire TV are cluttered and slow. Visor focuses on what you use 
 ## Features
 
 ### Home
-- **Continue watching:** movies you left halfway and, for each series, the episode in progress or the next one. **OK** resumes at the exact second; **☰ Menu** opens the detail page or removes it from the row.
-- **New movies showcase:** a large card with backdrop, synopsis, year, genre and rating. It rotates on its own; press **← →** to browse, **OK** to open.
-- **New series shelf:** the latest series with cover and description.
-- The layout is sized to the screen, so nothing is cut off on a 16:9 TV.
+- **Cinematic front page:** the newest movies and series rotate full screen with their artwork, title logo, details and synopsis. **▶ Play** starts right away, **More info** opens the detail page, **＋** adds it to your list. **← →** on the first or last button browses the rest.
+- **Rows that follow your focus:** press **↓** and the background and details switch to whatever you select, Apple TV style.
+- **Continue watching** with large thumbnails and progress: movies you left halfway and, for each series, the episode in progress or the next one. **OK** resumes at the exact second; **☰ Menu** opens the detail page or removes it.
+- **New movies** and **New series** rows.
+- Home is always dark, whatever theme you choose for the rest of the app.
 
 ### Live TV
 - Channels grouped in your provider's folders, with what's on now from the EPG.

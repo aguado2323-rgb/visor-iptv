@@ -370,7 +370,7 @@ fun HomeScreen(app: VisorApp, nav: Nav) = CompositionLocalProvider(LocalPalette 
                                     focusedRow = i
                                     scope.launch { listState.animateScrollToItem(i) }
                                 } else if (it.hasFocus) focusedRow = i
-                            }) {
+                            }.focusGroup()) {
                                 val label = when (r) { "cw" -> "Seguir viendo"; "mv" -> "Películas nuevas"; else -> "Series nuevas" }
                                 T(label, SECTION, Color.White.copy(alpha = if (!lower || focusedRow == i) 1f else 0.45f), Modifier.padding(start = 48.dp))
                                 when (r) {
