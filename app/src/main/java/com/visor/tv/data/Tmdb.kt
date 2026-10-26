@@ -61,6 +61,8 @@ class Tmdb(private val http: OkHttpClient) {
             http.newCall(Request.Builder().url(u).build()).execute().use { r ->
                 if (!r.isSuccessful) null else json.parseToJsonElement(r.body?.string() ?: return@use null).asObj()
             }
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
         } catch (e: Exception) { null }
     }
 

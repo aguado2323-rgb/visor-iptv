@@ -56,10 +56,20 @@ sealed interface Load<out T> {
 @Suppress("UNCHECKED_CAST")
 fun <T> Load<T>.orNull(): T? = (this as? Load.Ok<T>)?.value
 
+/** Espera antes de cargar el contenido de una carpeta enfocada (si se sigue bajando, se cancela). */
+const val FOLDER_DEBOUNCE_MS = 200L
+
 @Composable
 fun <T> load(vararg keys: Any?, block: suspend () -> T): Load<T> =
     produceState<Load<T>>(Load.Loading, *keys) {
-        value = try { Load.Ok(block()) } catch (e: Exception) { Load.Err(e.message ?: "Error al cargar") }
+        value = try {
+            Load.Ok(block())
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            // Se ha cambiado de carpeta o de pantalla antes de terminar: no es un error, la carga nueva ya está en marcha
+            throw e
+        } catch (e: Exception) {
+            Load.Err(e.message ?: "Error al cargar")
+        }
     }.value
 
 @Composable

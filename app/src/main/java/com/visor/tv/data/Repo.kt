@@ -81,6 +81,8 @@ class Repo(private val ctx: Context, private val http: OkHttpClient, private val
             val el = fetch(acc(), params)
             f.writeText(el.toString())
             el
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
         } catch (e: Exception) {
             if (f.exists()) json.parseToJsonElement(f.readText()) else throw e
         }
@@ -366,8 +368,12 @@ class Repo(private val ctx: Context, private val http: OkHttpClient, private val
                 .map { EpgEntry(b64(it.s("title")), b64(it.s("description")), it.l("start_timestamp") * 1000, it.l("stop_timestamp") * 1000) }
                 .filter { it.end > it.start }
                 .sortedBy { it.start }
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e // se dejó de mostrar ese canal: no se guarda nada
         } catch (e: Exception) {
-            emptyList()
+            // Fallo de red: se vuelve a intentar al cabo de un minuto, no de diez
+            epgMem[streamId] = (System.currentTimeMillis() - 9 * 60_000L) to emptyList()
+            return emptyList()
         }
         epgMem[streamId] = System.currentTimeMillis() to list
         return list

@@ -61,6 +61,7 @@ fun LiveScreen(app: VisorApp) {
                 LockedPanel(app, "live", selected)
             } else {
                 val streams = load(selected, app.favorites.items.size, app.repo.version) {
+                    kotlinx.coroutines.delay(FOLDER_DEBOUNCE_MS) // al recorrer carpetas deprisa no se pide cada una por el camino
                     if (selected == FAV_FOLDER) app.favorites.of("live").map { it.toLive() } else app.repo.liveStreams(selected)
                 }
                 T("OK para ver · ≡ Menú para favoritos y grabar", Type.small, LocalPalette.current.muted, Modifier.padding(start = 12.dp, bottom = 6.dp))
