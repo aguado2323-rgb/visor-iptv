@@ -83,7 +83,7 @@ fun MoviesScreen(app: VisorApp, nav: Nav) {
                 null -> {}
                 SEARCH_FOLDER -> SearchPanel("Buscar película", { val ex = app.folders.excludes("vod"); app.repo.allVod().filterNot { ex(it.categoryId) } }, { it.name }) { found -> MovieGrid(app, nav, found) }
                 else -> if (isBlockedFolder(app, "vod", sel)) LockedPanel(app, "vod", sel) else {
-                    val items = load(sel, app.favorites.items.size, app.repo.version, app.folders.version) {
+                    val items = load(sel, app.favorites.items.size, app.repo.version, app.folders.version, reset = true) {
                         kotlinx.coroutines.delay(FOLDER_DEBOUNCE_MS) // al recorrer carpetas deprisa no se pide cada una por el camino
                         when (sel) {
                             FAV_FOLDER -> app.favorites.of("vod").map { it.toVod() }
@@ -148,7 +148,7 @@ fun SeriesScreen(app: VisorApp, nav: Nav) {
                 null -> {}
                 SEARCH_FOLDER -> SearchPanel("Buscar serie", { val ex = app.folders.excludes("series"); app.repo.allSeries().filterNot { ex(it.categoryId) } }, { it.name }) { found -> SeriesGrid(app, nav, found) }
                 else -> if (isBlockedFolder(app, "series", sel)) LockedPanel(app, "series", sel) else {
-                    val items = load(sel, app.favorites.items.size, app.repo.version, app.folders.version) {
+                    val items = load(sel, app.favorites.items.size, app.repo.version, app.folders.version, reset = true) {
                         kotlinx.coroutines.delay(FOLDER_DEBOUNCE_MS) // al recorrer carpetas deprisa no se pide cada una por el camino
                         when (sel) {
                             FAV_FOLDER -> app.favorites.of("series").map { it.toSeries() }

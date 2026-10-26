@@ -157,7 +157,7 @@ fun GuideScreen(app: VisorApp) {
                 TvButton("Día ››", onClick = { shift(DAY_MS) })
                 T("  ${dayLabel(windowStart)} · ${hm(windowStart)} – ${hm(windowStart + WINDOW_MIN * 60_000L)}", Type.label, p.text)
             }
-            val streams = load(selected, app.favorites.items.size, app.repo.version) {
+            val streams = load(selected, app.favorites.items.size, app.repo.version, reset = true) {
                 kotlinx.coroutines.delay(FOLDER_DEBOUNCE_MS) // al recorrer carpetas deprisa no se pide cada una por el camino
                 if (selected == FAV_FOLDER) app.favorites.of("live").map { it.toLive() } else app.repo.liveStreams(selected)
             }

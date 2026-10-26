@@ -60,8 +60,10 @@ fun <T> Load<T>.orNull(): T? = (this as? Load.Ok<T>)?.value
 const val FOLDER_DEBOUNCE_MS = 200L
 
 @Composable
-fun <T> load(vararg keys: Any?, block: suspend () -> T): Load<T> =
+fun <T> load(vararg keys: Any?, reset: Boolean = false, block: suspend () -> T): Load<T> =
     produceState<Load<T>>(Load.Loading, *keys) {
+        // Con reset, al cambiar de carpeta se ve "Cargando…" en vez del contenido de la anterior
+        if (reset) value = Load.Loading
         value = try {
             Load.Ok(block())
         } catch (e: kotlinx.coroutines.CancellationException) {

@@ -60,7 +60,7 @@ fun LiveScreen(app: VisorApp) {
             } else if (isBlockedFolder(app, "live", selected)) {
                 LockedPanel(app, "live", selected)
             } else {
-                val streams = load(selected, app.favorites.items.size, app.repo.version) {
+                val streams = load(selected, app.favorites.items.size, app.repo.version, reset = true) {
                     kotlinx.coroutines.delay(FOLDER_DEBOUNCE_MS) // al recorrer carpetas deprisa no se pide cada una por el camino
                     if (selected == FAV_FOLDER) app.favorites.of("live").map { it.toLive() } else app.repo.liveStreams(selected)
                 }
