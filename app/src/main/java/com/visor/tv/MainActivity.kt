@@ -87,11 +87,16 @@ class Nav {
     val stack = mutableStateListOf<Route>(Route.Tabs)
     var tab by mutableStateOf(Tab.HOME)
     var settingsUnlocked by mutableStateOf(false)
-    /** Elemento del catálogo desde el que se abrió la ficha; al volver, recupera el foco. */
+    /** Elemento desde el que se abrió la ficha que se acaba de cerrar; al volver, recupera el foco. */
     var returnKey by mutableStateOf<String?>(null)
-    fun push(r: Route) { stack.add(r) }
-    fun open(r: Route, fromKey: String) { returnKey = fromKey; stack.add(r) }
-    fun pop(): Boolean = if (stack.size > 1) { stack.removeAt(stack.lastIndex); true } else false
+    /** Una clave por pantalla abierta, para volver al elemento exacto aunque se encadenen fichas. */
+    private val keys = mutableListOf<String?>()
+    fun push(r: Route) { keys.add(null); returnKey = null; stack.add(r) }
+    fun open(r: Route, fromKey: String) { keys.add(fromKey); returnKey = null; stack.add(r) }
+    fun pop(): Boolean = if (stack.size > 1) {
+        returnKey = keys.removeLastOrNull()
+        stack.removeAt(stack.lastIndex); true
+    } else false
 }
 
 class MainActivity : ComponentActivity() {
@@ -184,8 +189,9 @@ private fun Root(app: VisorApp, onExit: () -> Unit) {
                 }
                 when (val r = nav.stack.last()) {
                     Route.Tabs -> tabsState.SaveableStateProvider("tabs") { TabsScaffold(app, nav) }
-                    is Route.Movie -> MovieDetail(app, r.vod)
-                    is Route.Show -> SeriesDetail(app, r.series)
+                    // key: cada ficha empieza de cero aunque se abra una desde otra
+                    is Route.Movie -> androidx.compose.runtime.key(r, nav.stack.size) { MovieDetail(app, nav, r.vod) }
+                    is Route.Show -> androidx.compose.runtime.key(r, nav.stack.size) { SeriesDetail(app, r.series) }
                 }
                 if (app.updater.prompt) UpdateDialog(app)
                 MiniPlayerWindow(Modifier.align(Alignment.BottomEnd).padding(24.dp))
