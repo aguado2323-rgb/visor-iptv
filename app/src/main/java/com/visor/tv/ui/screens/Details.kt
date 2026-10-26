@@ -91,6 +91,43 @@ private val SYNOPSIS = Type.body.copy(fontSize = 14.sp, lineHeight = 20.sp)
 private val SECTION = Type.h2.copy(fontSize = 15.sp)
 private val MUTED = Color(0xFF9A9DA3)
 
+/** Proveedor o TMDB, según qué fuente mande en Ajustes; la otra rellena lo que falte. */
+private fun pick(tmdbFirst: Boolean, provider: String?, tmdb: String?): String? {
+    val a = provider?.trim()?.ifBlank { null }
+    val b = tmdb?.trim()?.ifBlank { null }
+    return if (tmdbFirst) b ?: a else a ?: b
+}
+
+private fun minutes(m: Int): String? = when { m <= 0 -> null; m >= 60 -> "${m / 60} h ${m % 60} min"; else -> "$m min" }
+
+/** Títulos de episodio que no dicen nada ("Episodio 3", "S01E03", el nombre de la serie…). */
+private fun genericEpisodeTitle(t: String, num: Int, series: String): Boolean {
+    val x = t.trim()
+    return x.isBlank() || x == num.toString() ||
+        Regex("""(?i)^(episod(e|io)|cap[ií]tulo|cap\.?|ep\.?)\s*\d+$""").matches(x) ||
+        Regex("""(?i)s\d{1,2}\s*[ex]\s*\d{1,3}""").containsMatchIn(x) ||
+        com.visor.tv.data.normalizeText(x) == com.visor.tv.data.normalizeText(series)
+}
+
+/** Título: el logotipo de TMDB si lo hay (como en las plataformas), o el texto grande. */
+@Composable
+private fun TitleArt(title: String, logo: String?) {
+    var failed by remember(logo) { mutableStateOf(false) }
+    var loaded by remember(logo) { mutableStateOf(false) }
+    if (!logo.isNullOrBlank() && !failed) {
+        coil.compose.AsyncImage(
+            model = logo,
+            contentDescription = title,
+            contentScale = androidx.compose.ui.layout.ContentScale.Fit,
+            alignment = Alignment.CenterStart,
+            onSuccess = { loaded = true },
+            onError = { failed = true },
+            modifier = Modifier.height(if (loaded) 88.dp else 0.dp).widthIn(max = 420.dp).fillMaxWidth(),
+        )
+    }
+    if (logo.isNullOrBlank() || failed || !loaded) T(title, BIG_TITLE, Color.White, maxLines = 2)
+}
+
 private fun hms(ms: Long): String {
     val m = (ms / 60_000).coerceAtLeast(1)
     return if (m >= 60) "${m / 60} h ${m % 60} min" else "$m min"
@@ -219,11 +256,27 @@ fun MovieDetail(app: VisorApp, nav: Nav, vod: VodStream) = CompositionLocalProvi
     val ctx = LocalContext.current
     val scope = rememberCoroutineScope()
     val info = load(vod.id) { app.repo.vodInfo(vod.id) }
-    val useTmdb = app.settings.artSource == ArtSource.TMDB && app.tmdb.available
-    val tmdb = load(vod.id, useTmdb, info.orNull()?.tmdbId) {
-        if (useTmdb) app.tmdb.art(info.orNull()?.tmdbId.orEmpty(), isTv = false) else null
-    }.orNull()
     val i = info.orNull()
+    // TMDB completa la ficha (imagen apaisada, logotipo, reparto, edad, parecidas). Se busca por título si
+    // el proveedor no da su identificador.
+    val tmFirst = app.settings.artSource == ArtSource.TMDB
+    val tm = load(vod.id, info is Load.Loading) {
+        if (info is Load.Loading) null
+        else app.tmdb.movie(i?.tmdbId, i?.name?.ifBlank { null } ?: vod.name, i?.year?.take(4)?.toIntOrNull() ?: vod.year)
+    }.orNull()
+    // Recomendaciones de TMDB que están en tu lista
+    val similar = load(tm?.id, app.repo.version, app.folders.version) {
+        val recs = tm?.recommendations.orEmpty()
+        if (recs.isEmpty()) emptyList() else {
+            val idx = app.repo.vodTitleIndex()
+            val ex = app.folders.excludes("vod")
+            recs.mapNotNull { r ->
+                val cands = idx[com.visor.tv.data.normalizeText(com.visor.tv.data.cleanTitle(r.title))].orEmpty() +
+                    idx[com.visor.tv.data.normalizeText(com.visor.tv.data.cleanTitle(r.originalTitle))].orEmpty()
+                cands.firstOrNull { c -> c.id != vod.id && !ex(c.categoryId) && (r.year == 0 || c.year == 0 || kotlin.math.abs(c.year - r.year) <= 1) }
+            }.distinctBy { it.id }.take(20)
+        }
+    }.orNull().orEmpty()
     val playBtn = remember { FocusRequester() }
     val isFav = app.favorites.contains("vod", vod.id)
     val resume = app.progress.entries.firstOrNull { it.item.key == "vod:${vod.id}" && !it.done }
@@ -242,11 +295,18 @@ fun MovieDetail(app: VisorApp, nav: Nav, vod: VodStream) = CompositionLocalProvi
     }.orNull()
 
     val title = i?.name?.ifBlank { null } ?: vod.name
-    val year = i?.year?.ifBlank { null } ?: vod.year.takeIf { it > 0 }?.toString()
-    val duration = i?.duration?.ifBlank { null }?.let { fmtDuration(it) }
-    val stars = tmdb?.rating?.ifBlank { null }?.let { "★ $it" } ?: rating(i?.rating ?: vod.rating)
-    val meta = listOfNotNull(year, duration, i?.genre?.ifBlank { null }, stars).joinToString("  ·  ")
-    val plot = tmdb?.overview?.ifBlank { null } ?: i?.plot.orEmpty()
+    val year = i?.year?.ifBlank { null }?.take(4) ?: vod.year.takeIf { it > 0 }?.toString() ?: tm?.releaseDate?.takeLast(4)
+    val duration = pick(tmFirst, i?.duration?.ifBlank { null }?.let { fmtDuration(it) }, minutes(tm?.runtimeMin ?: 0))
+    val stars = (if (tmFirst) tm?.rating?.ifBlank { null }?.let { "★ $it" } else null)
+        ?: rating(i?.rating ?: vod.rating) ?: tm?.rating?.ifBlank { null }?.let { "★ $it" }
+    val meta = listOfNotNull(year, duration, pick(tmFirst, i?.genre, tm?.genres), stars).joinToString("  ·  ")
+    val plot = pick(tmFirst, i?.plot, tm?.overview).orEmpty()
+    val age = pick(tmFirst, i?.age, tm?.certification)
+    val cast = pick(tmFirst, i?.cast, tm?.cast)
+    val director = pick(tmFirst, i?.director, tm?.director)
+    val original = pick(tmFirst, i?.originalName, tm?.originalTitle)
+    val country = pick(tmFirst, i?.country, tm?.country)
+    val release = pick(tmFirst, i?.releaseDate, tm?.releaseDate)
     val item = PlayItem(kind = "vod", id = vod.id, ext = i?.ext ?: vod.ext, title = vod.name, icon = vod.icon)
 
     fun backToTop() {
@@ -260,8 +320,8 @@ fun MovieDetail(app: VisorApp, nav: Nav, vod: VodStream) = CompositionLocalProvi
 
     Box(Modifier.fillMaxSize()) {
         CinemaBackdrop(
-            tmdb?.backdrop?.ifBlank { null } ?: i?.backdrop?.ifBlank { null },
-            tmdb?.poster?.ifBlank { null } ?: i?.cover?.ifBlank { null } ?: vod.icon,
+            pick(tmFirst, i?.backdrop, tm?.backdrop),
+            pick(tmFirst, i?.cover, tm?.poster) ?: vod.icon,
             lower,
         )
         BoxWithConstraints(Modifier.fillMaxSize()) {
@@ -271,9 +331,9 @@ fun MovieDetail(app: VisorApp, nav: Nav, vod: VodStream) = CompositionLocalProvi
             Column(Modifier.padding(start = 48.dp, top = 40.dp).width(500.dp).alpha(headerAlpha)) {
                 T("PELÍCULA", EYEBROW, Color(0xFFC9C9C4))
                 Spacer(Modifier.height(4.dp))
-                T(title, BIG_TITLE, Color.White, maxLines = 2)
+                TitleArt(title, tm?.logo)
                 if (meta.isNotBlank()) T(meta, META, Color(0xFFD6D6D0), Modifier.padding(top = 6.dp))
-                val tags = listOfNotNull(i?.video?.ifBlank { null }, i?.audio?.ifBlank { null }, i?.age?.ifBlank { null })
+                val tags = listOfNotNull(i?.video?.ifBlank { null }, i?.audio?.ifBlank { null }, age)
                 if (tags.isNotEmpty()) Row(Modifier.padding(top = 8.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) { tags.forEach { Tag(it) } }
                 Spacer(Modifier.height(10.dp))
                 when {
@@ -282,8 +342,8 @@ fun MovieDetail(app: VisorApp, nav: Nav, vod: VodStream) = CompositionLocalProvi
                     else -> T("El proveedor no incluye sinopsis para esta película.", SYNOPSIS, MUTED)
                 }
                 val credits = listOfNotNull(
-                    i?.director?.ifBlank { null }?.let { "Dirección: $it" },
-                    i?.cast?.ifBlank { null }?.let { "Con $it" },
+                    director?.let { "Dirección: $it" },
+                    cast?.let { "Con $it" },
                 ).joinToString(" · ")
                 if (credits.isNotBlank()) T(credits, Type.small, MUTED, Modifier.padding(top = 6.dp))
                 Spacer(Modifier.height(16.dp))
@@ -322,10 +382,11 @@ fun MovieDetail(app: VisorApp, nav: Nav, vod: VodStream) = CompositionLocalProvi
                     T("Ficha", SECTION, Color.White)
                     Spacer(Modifier.height(8.dp))
                     val rows = listOfNotNull(
-                        i?.director?.ifBlank { null }?.let { "DIRECCIÓN" to it },
-                        i?.cast?.ifBlank { null }?.let { "REPARTO" to it },
-                        i?.originalName?.ifBlank { null }?.takeIf { !it.equals(title, true) }?.let { "TÍTULO ORIGINAL" to it },
-                        listOfNotNull(i?.country?.ifBlank { null }, i?.releaseDate?.ifBlank { null }).joinToString(" · ").ifBlank { null }?.let { "PAÍS · ESTRENO" to it },
+                        director?.let { "DIRECCIÓN" to it },
+                        cast?.let { "REPARTO" to it },
+                        original?.takeIf { !it.equals(title, true) }?.let { "TÍTULO ORIGINAL" to it },
+                        listOfNotNull(country, release).joinToString(" · ").ifBlank { null }?.let { "PAÍS · ESTRENO" to it },
+                        age?.let { "EDAD" to it },
                         listOfNotNull(i?.video?.ifBlank { null }, i?.audio?.ifBlank { null }).joinToString(" · ").ifBlank { null }?.let { "IMAGEN Y SONIDO" to it },
                     )
                     if (rows.isEmpty()) T("El proveedor no da más datos de esta película.", Type.small, MUTED)
@@ -339,7 +400,10 @@ fun MovieDetail(app: VisorApp, nav: Nav, vod: VodStream) = CompositionLocalProvi
             }
 
             // ---- Más de la misma carpeta: asoma abajo y sube al bajar ----
-            more?.let { (catName, list) ->
+            // Parecidas según TMDB que tienes en tu lista; si hay pocas, más de la misma carpeta
+            val shelf = if (similar.size >= 4) "Similares en tu lista" to similar
+                else more?.let { (catName, list) -> (if (catName.isNotBlank()) "Más de «$catName»" else "Más películas") to list }
+            shelf?.let { (shelfTitle, list) ->
                 val y by animateDpAsState(if (lower) 278.dp else screenH - 104.dp, tween(350), label = "mas")
                 Column(
                     Modifier
@@ -352,7 +416,7 @@ fun MovieDetail(app: VisorApp, nav: Nav, vod: VodStream) = CompositionLocalProvi
                         },
                 ) {
                     Row(Modifier.padding(start = 48.dp, end = 48.dp).fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                        T(if (catName.isNotBlank()) "Más de «$catName»" else "Más películas", SECTION, Color.White, Modifier.weight(1f))
+                        T(shelfTitle, SECTION, Color.White, Modifier.weight(1f))
                         if (!lower) T("↓ Detalles y más", Type.small, MUTED)
                     }
                     LazyRow(
@@ -386,11 +450,12 @@ fun SeriesDetail(app: VisorApp, series: SeriesItem) = CompositionLocalProvider(L
     val ctx = LocalContext.current
     val scope = rememberCoroutineScope()
     val info = load(series.id) { app.repo.seriesInfo(series.id) }
-    val useTmdb = app.settings.artSource == ArtSource.TMDB && app.tmdb.available
-    val tmdb = load(series.id, useTmdb, info.orNull()?.tmdbId) {
-        if (useTmdb) app.tmdb.art(info.orNull()?.tmdbId.orEmpty(), isTv = true) else null
-    }.orNull()
     val si = info.orNull()
+    val tmFirst = app.settings.artSource == ArtSource.TMDB
+    val tm = load(series.id, info is Load.Loading) {
+        if (info is Load.Loading) null
+        else app.tmdb.tv(si?.tmdbId, si?.name?.ifBlank { null } ?: series.name, si?.year?.take(4)?.toIntOrNull() ?: series.year)
+    }.orNull()
     val isFav = app.favorites.contains("series", series.id)
     val mainBtn = remember { FocusRequester() }
     var trailerMsg by remember { mutableStateOf<String?>(null) }
@@ -423,22 +488,26 @@ fun SeriesDetail(app: VisorApp, series: SeriesItem) = CompositionLocalProvider(L
 
     val title = si?.name?.ifBlank { null } ?: series.name
     val nSeasons = si?.seasons?.size ?: 0
-    val stars = tmdb?.rating?.ifBlank { null }?.let { "★ $it" } ?: rating(si?.rating ?: series.rating)
+    val stars = (if (tmFirst) tm?.rating?.ifBlank { null }?.let { "★ $it" } else null)
+        ?: rating(si?.rating ?: series.rating) ?: tm?.rating?.ifBlank { null }?.let { "★ $it" }
     val meta = listOfNotNull(
-        si?.year?.ifBlank { null } ?: series.year.takeIf { it > 0 }?.toString(),
-        si?.genre?.ifBlank { null },
+        si?.year?.ifBlank { null }?.take(4) ?: series.year.takeIf { it > 0 }?.toString() ?: tm?.releaseDate?.takeLast(4),
+        pick(tmFirst, si?.genre, tm?.genres),
         if (nSeasons > 0) "$nSeasons ${if (nSeasons == 1) "temporada" else "temporadas"}" else null,
         stars,
     ).joinToString("  ·  ")
-    val plot = tmdb?.overview?.ifBlank { null } ?: si?.plot?.ifBlank { null } ?: series.plot
+    val plot = pick(tmFirst, si?.plot?.ifBlank { null } ?: series.plot, tm?.overview).orEmpty()
+    val age = tm?.certification?.ifBlank { null }
+    // Episodios de TMDB de la temporada elegida: imagen, título y sinopsis en español si el proveedor no los trae
+    val tmEps = load(tm?.id, season) { tm?.let { app.tmdb.season(it.id, season) } ?: emptyMap() }.orNull().orEmpty()
 
     val headerAlpha by animateFloatAsState(if (lower) 0f else 1f, tween(300), label = "cabecera")
     val lowerAlpha = 1f - headerAlpha
 
     Box(Modifier.fillMaxSize()) {
         CinemaBackdrop(
-            tmdb?.backdrop?.ifBlank { null } ?: si?.backdrop?.ifBlank { null },
-            tmdb?.poster?.ifBlank { null } ?: si?.cover?.ifBlank { null } ?: series.cover,
+            pick(tmFirst, si?.backdrop, tm?.backdrop),
+            pick(tmFirst, si?.cover, tm?.poster) ?: series.cover,
             lower,
         )
         BoxWithConstraints(Modifier.fillMaxSize()) {
@@ -448,16 +517,17 @@ fun SeriesDetail(app: VisorApp, series: SeriesItem) = CompositionLocalProvider(L
             Column(Modifier.padding(start = 48.dp, top = 40.dp).width(500.dp).alpha(headerAlpha)) {
                 T("SERIE", EYEBROW, Color(0xFFC9C9C4))
                 Spacer(Modifier.height(4.dp))
-                T(title, BIG_TITLE, Color.White, maxLines = 2)
+                TitleArt(title, tm?.logo)
                 if (meta.isNotBlank()) T(meta, META, Color(0xFFD6D6D0), Modifier.padding(top = 6.dp))
+                if (age != null) Row(Modifier.padding(top = 8.dp)) { Tag(age) }
                 Spacer(Modifier.height(10.dp))
                 T(
                     plot.ifBlank { if (info is Load.Loading) "Cargando…" else "Sin descripción del proveedor." },
                     SYNOPSIS, Color(0xFFE6E6E2), maxLines = 3,
                 )
                 val credits = listOfNotNull(
-                    si?.cast?.ifBlank { null }?.let { "Con $it" },
-                    si?.director?.ifBlank { null }?.let { "Creada por $it" },
+                    pick(tmFirst, si?.cast, tm?.cast)?.let { "Con $it" },
+                    pick(tmFirst, si?.director, tm?.director)?.let { "Creada por $it" },
                 ).joinToString(" · ")
                 if (credits.isNotBlank()) T(credits, Type.small, MUTED, Modifier.padding(top = 6.dp))
                 Spacer(Modifier.height(16.dp))
@@ -528,7 +598,7 @@ fun SeriesDetail(app: VisorApp, series: SeriesItem) = CompositionLocalProvider(L
                         contentPadding = PaddingValues(start = 48.dp, end = 48.dp, top = 18.dp, bottom = 8.dp),
                     ) {
                         itemsIndexed(eps, key = { _, e -> e.id }) { _, e ->
-                            EpisodeCard(app, series, e, if (lastWatched?.done == true && lastWatched.item.id == e.id) "Visto" else null) { playEpisode(e) }
+                            EpisodeCard(app, series, e, tmEps[e.num], tmFirst, if (lastWatched?.done == true && lastWatched.item.id == e.id) "Visto" else null) { playEpisode(e) }
                         }
                     }
                 }
@@ -556,7 +626,18 @@ private fun SeasonTab(label: String, selected: Boolean, onSelect: () -> Unit) {
 
 /** Tarjeta de episodio: imagen grande, número, progreso o visto, y su sinopsis siempre en el mismo hueco. */
 @Composable
-private fun EpisodeCard(app: VisorApp, series: SeriesItem, e: Episode, badge: String?, onClick: () -> Unit) {
+private fun EpisodeCard(
+    app: VisorApp, series: SeriesItem, e: Episode, tmEp: com.visor.tv.data.TmdbEpisode?, tmFirst: Boolean,
+    badge: String?, onClick: () -> Unit,
+) {
+    val image = pick(tmFirst, e.image, tmEp?.still) ?: series.cover
+    val name = when {
+        tmFirst -> tmEp?.name?.ifBlank { null } ?: e.title
+        genericEpisodeTitle(e.title, e.num, series.name) -> tmEp?.name?.ifBlank { null } ?: e.title
+        else -> e.title
+    }
+    val synopsis = pick(tmFirst, e.plot, tmEp?.overview).orEmpty()
+    val duration = pick(tmFirst, e.duration.ifBlank { null }?.let { fmtDuration(it) }, minutes(tmEp?.runtimeMin ?: 0))
     val prog = app.progress.entries.firstOrNull { it.item.key == "episode:${e.id}" && !it.done }
     val cardW: Dp = 252.dp
     Column(Modifier.width(cardW)) {
@@ -565,7 +646,7 @@ private fun EpisodeCard(app: VisorApp, series: SeriesItem, e: Episode, badge: St
                 Modifier.fillMaxWidth().aspectRatio(16f / 9f)
                     .border(if (focused) 3.dp else 0.dp, if (focused) Color.White else Color.Transparent, RoundedCornerShape(10.dp))
             ) {
-                Img(e.image.ifBlank { series.cover }, Modifier.fillMaxSize().clip(RoundedCornerShape(10.dp)))
+                Img(image, Modifier.fillMaxSize().clip(RoundedCornerShape(10.dp)))
                 Box(Modifier.align(Alignment.TopStart).padding(7.dp).clip(RoundedCornerShape(5.dp)).background(Color.Black.copy(alpha = 0.55f)).padding(horizontal = 7.dp, vertical = 2.dp)) {
                     T("${e.num}", Type.small.copy(fontWeight = FontWeight.Bold), Color.White)
                 }
@@ -582,13 +663,13 @@ private fun EpisodeCard(app: VisorApp, series: SeriesItem, e: Episode, badge: St
             }
         }
         Spacer(Modifier.height(10.dp))
-        T(e.title.ifBlank { "Episodio ${e.num}" }, Type.label.copy(fontSize = 14.sp), Color.White)
+        T(name.ifBlank { "Episodio ${e.num}" }, Type.label.copy(fontSize = 14.sp), Color.White)
         val sub = listOfNotNull(
-            e.duration.ifBlank { null }?.let { fmtDuration(it) },
+            duration,
             prog?.let { "Quedan ${hms(it.durationMs - it.positionMs)}" } ?: badge,
         ).joinToString(" · ")
         T(sub.ifBlank { " " }, Type.small.copy(fontSize = 11.sp), MUTED, Modifier.padding(top = 2.dp))
         // Siempre tres líneas reservadas: la fila no salta al recorrerla
-        T(e.plot.ifBlank { " " }, Type.small.copy(fontSize = 11.sp, lineHeight = 15.sp), Color(0xFFC4C6CA), Modifier.padding(top = 4.dp), maxLines = 3, minLines = 3)
+        T(synopsis.ifBlank { " " }, Type.small.copy(fontSize = 11.sp, lineHeight = 15.sp), Color(0xFFC4C6CA), Modifier.padding(top = 4.dp), maxLines = 3, minLines = 3)
     }
 }

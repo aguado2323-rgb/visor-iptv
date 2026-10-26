@@ -199,6 +199,11 @@ class Repo(private val ctx: Context, private val http: OkHttpClient, private val
     suspend fun allVod(): List<VodStream> = memo("vs:*") { parseVod(cached("&action=get_vod_streams", TTL_LIST)) }
     suspend fun allSeries(): List<SeriesItem> = memo("ss:*") { parseSeries(cached("&action=get_series", TTL_LIST)) }
 
+    /** Películas por título limpio (sin año, idioma ni calidad), para encontrar en tu lista las que recomienda TMDB. */
+    suspend fun vodTitleIndex(): Map<String, List<VodStream>> = memo("vs:idx") {
+        withContext(Dispatchers.Default) { allVod().groupBy { normalizeText(cleanTitle(it.name)) } }
+    }
+
     /** Las [n] películas añadidas más recientemente a la lista (sin carpetas ocultas ni bloqueadas). */
     suspend fun latestVod(n: Int = 30): List<VodStream> = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Default) {
         val ex = com.visor.tv.VisorApp.instance.folders.excludes("vod")

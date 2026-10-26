@@ -200,7 +200,7 @@ fun SettingsScreen(app: VisorApp, nav: Nav) {
         item {
             ListRow(
                 "Carátulas y sinopsis",
-                subtitle = if (app.tmdb.available) "Las del proveedor o las de TMDB (en fichas)" else "TMDB no está incluido en esta compilación",
+                subtitle = if (app.tmdb.available) "Qué fuente manda en las fichas; la otra rellena lo que falte (imágenes, reparto, episodios…)" else "TMDB no está incluido en esta compilación",
                 trailing = if (app.tmdb.available) s.artSource.label else ArtSource.PROVIDER.label,
                 onClick = { if (app.tmdb.available) s.updateArt(s.artSource.next()) },
             )
