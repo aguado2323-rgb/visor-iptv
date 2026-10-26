@@ -86,8 +86,8 @@ fun Focusable(
 }
 
 @Composable
-fun T(text: String, style: TextStyle, color: Color = LocalPalette.current.text, modifier: Modifier = Modifier, maxLines: Int = 1) {
-    Text(text = text, style = style, color = color, modifier = modifier, maxLines = maxLines, overflow = TextOverflow.Ellipsis)
+fun T(text: String, style: TextStyle, color: Color = LocalPalette.current.text, modifier: Modifier = Modifier, maxLines: Int = 1, minLines: Int = 1) {
+    Text(text = text, style = style, color = color, modifier = modifier, maxLines = maxLines, minLines = minLines, overflow = TextOverflow.Ellipsis)
 }
 
 @Composable

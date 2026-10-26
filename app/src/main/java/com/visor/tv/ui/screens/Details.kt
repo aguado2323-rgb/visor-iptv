@@ -289,7 +289,8 @@ fun SeriesDetail(app: VisorApp, series: SeriesItem) {
                 T(
                     fe?.let { listOfNotNull("E${it.num} · ${it.title}", it.duration.ifBlank { null }).joinToString(" · ") + (if (it.plot.isNotBlank()) " — ${it.plot}" else "") }
                         ?: "Elige un episodio para ver de qué va.",
-                    Type.small, p.muted, maxLines = 2,
+                    // Siempre reserva dos líneas: así la fila de episodios no salta al recorrerla
+                    Type.small, p.muted, maxLines = 2, minLines = 2,
                 )
             }
         }
