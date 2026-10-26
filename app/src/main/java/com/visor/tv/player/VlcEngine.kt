@@ -11,6 +11,18 @@ import org.videolan.libvlc.Media
 import org.videolan.libvlc.MediaPlayer
 import org.videolan.libvlc.util.VLCVideoLayout
 
+/**
+ * Una sola instancia de LibVLC por combinación de opciones, compartida por todos los reproductores.
+ * Crearla carga todos los módulos de VLC; reutilizarla hace que abrir un vídeo con VLC sea casi inmediato.
+ */
+private object VlcShared {
+    private val instances = HashMap<String, LibVLC>()
+
+    @Synchronized
+    fun get(context: Context, opts: List<String>): LibVLC =
+        instances.getOrPut(opts.joinToString("|")) { LibVLC(context.applicationContext, ArrayList(opts)) }
+}
+
 /** Motor VLC: útil con streams o códecs que ExoPlayer no abre bien. */
 class VlcEngine(
     context: Context,
@@ -30,7 +42,7 @@ class VlcEngine(
         val opts = arrayListOf("--network-caching=1500", "--http-reconnect", "--no-stats")
         if (audioLang != null) opts += "--audio-language=$audioLang"
         if (subsLang != null) opts += "--sub-language=$subsLang"
-        libVlc = LibVLC(context, opts)
+        libVlc = VlcShared.get(context, opts)
         mp = MediaPlayer(libVlc)
         mp.setEventListener(object : MediaPlayer.EventListener {
             override fun onEvent(event: MediaPlayer.Event) {
@@ -82,7 +94,7 @@ class VlcEngine(
             mp.detachViews()
         } catch (_: Exception) { }
         mp.release()
-        libVlc.release()
+        // LibVLC no se libera: se reutiliza en el siguiente vídeo (crearlo cuesta medio segundo)
     }
 
     private var aspectMode = com.visor.tv.data.Aspect.FIT

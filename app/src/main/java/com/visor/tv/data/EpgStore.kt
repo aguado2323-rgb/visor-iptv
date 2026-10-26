@@ -235,4 +235,7 @@ class EpgStore(private val ctx: Context, private val http: OkHttpClient) {
 
 /** Minúsculas y sin tildes, para buscar sin preocuparse de cómo está escrito. */
 fun normalizeText(s: String): String =
-    java.text.Normalizer.normalize(s, java.text.Normalizer.Form.NFD).replace(Regex("\\p{Mn}+"), "").lowercase()
+    java.text.Normalizer.normalize(s, java.text.Normalizer.Form.NFD).replace(MARKS, "").lowercase()
+
+// Expresiones compiladas una sola vez: se usan con decenas de miles de títulos y programas
+private val MARKS = Regex("\\p{Mn}+")

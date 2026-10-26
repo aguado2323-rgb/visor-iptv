@@ -196,10 +196,18 @@ fun yearIn(name: String): Int = YEAR.findAll(name).lastOrNull()?.groupValues?.ge
  */
 fun cleanTitle(name: String): String {
     var t = name
-    t = t.replace(Regex("""^\s*(\[[^\]]{1,12}\]|\|[^|]{1,12}\||[A-Z]{2,4}\s*[-:|]\s+)+"""), "")
-    t = t.replace(Regex("""[\[(]\s*(19|20)\d{2}\s*[\])]"""), " ")
-    t = t.replace(Regex("""\s[-|]\s*(19|20)\d{2}\s*$"""), " ")
-    t = t.replace(Regex("""(?i)\b(4k|uhd|fhd|hd|sd|1080p|720p|2160p|hdr|vose|vos|multi|dual|latino|castellano|subs?)\b"""), " ")
-    t = t.replace(Regex("""[\[\]()|]"""), " ")
-    return t.replace(Regex("""\s+"""), " ").trim().trimEnd('-', ':').trim()
+    t = t.replace(CT_PREFIX, "")
+    t = t.replace(CT_YEAR_PAREN, " ")
+    t = t.replace(CT_YEAR_TAIL, " ")
+    t = t.replace(CT_QUALITY, " ")
+    t = t.replace(CT_BRACKETS, " ")
+    return t.replace(CT_SPACES, " ").trim().trimEnd('-', ':').trim()
 }
+
+// Compiladas una sola vez (cleanTitle se usa con toda la lista de películas)
+private val CT_PREFIX = Regex("""^\s*(\[[^\]]{1,12}\]|\|[^|]{1,12}\||[A-Z]{2,4}\s*[-:|]\s+)+""")
+private val CT_YEAR_PAREN = Regex("""[\[(]\s*(19|20)\d{2}\s*[\])]""")
+private val CT_YEAR_TAIL = Regex("""\s[-|]\s*(19|20)\d{2}\s*$""")
+private val CT_QUALITY = Regex("""(?i)\b(4k|uhd|fhd|hd|sd|1080p|720p|2160p|hdr|vose|vos|multi|dual|latino|castellano|subs?)\b""")
+private val CT_BRACKETS = Regex("""[\[\]()|]""")
+private val CT_SPACES = Regex("""\s+""")

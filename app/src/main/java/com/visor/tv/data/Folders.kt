@@ -20,9 +20,17 @@ class Folders(context: Context) {
     /** Carpetas bloqueadas abiertas con el PIN en esta sesión ("tipo:id"). */
     private val unlocked = mutableStateListOf<String>()
 
-    private fun read(key: String): List<String> = p.getString(key, "").orEmpty().split(SEP).filter { it.isNotEmpty() }
+    // Lo leído se guarda en memoria: la columna de carpetas lo consulta en cada fila al pintarse
+    private val lists = java.util.concurrent.ConcurrentHashMap<String, List<String>>()
+    private val sets = java.util.concurrent.ConcurrentHashMap<String, Set<String>>()
+
+    private fun read(key: String): List<String> =
+        lists.getOrPut(key) { p.getString(key, "").orEmpty().split(SEP).filter { it.isNotEmpty() } }
+    private fun readSet(key: String): Set<String> = sets.getOrPut(key) { read(key).toSet() }
     private fun write(key: String, v: Collection<String>) {
         p.edit().putString(key, v.joinToString(SEP)).apply()
+        lists[key] = v.toList()
+        sets.remove(key)
         version++
     }
 
@@ -30,8 +38,8 @@ class Folders(context: Context) {
     private fun lockedKey(type: String) = "fold_locked_$type"
     private fun orderKey(type: String) = "fold_order_$type"
 
-    fun hidden(type: String): Set<String> = read(hiddenKey(type)).toSet()
-    fun locked(type: String): Set<String> = read(lockedKey(type)).toSet()
+    fun hidden(type: String): Set<String> = readSet(hiddenKey(type))
+    fun locked(type: String): Set<String> = readSet(lockedKey(type))
 
     fun isHidden(type: String, id: String) = id in hidden(type)
     fun isLocked(type: String, id: String) = id in locked(type)
@@ -60,10 +68,12 @@ class Folders(context: Context) {
     /** Las carpetas en el orden elegido; las que añada el proveedor después van al final, en su orden. */
     fun arrange(type: String, cats: List<Category>, includeHidden: Boolean = false): List<Category> {
         val order = read(orderKey(type))
-        val pos = order.withIndex().associate { (i, id) -> id to i }
-        val sorted = cats.withIndex()
-            .sortedWith(compareBy({ pos[it.value.id] ?: (order.size + it.index) }, { it.index }))
-            .map { it.value }
+        val sorted = if (order.isEmpty()) cats else {
+            val pos = order.withIndex().associate { (i, id) -> id to i }
+            cats.withIndex()
+                .sortedWith(compareBy({ pos[it.value.id] ?: (order.size + it.index) }, { it.index }))
+                .map { it.value }
+        }
         if (includeHidden) return sorted
         val h = hidden(type)
         return if (h.isEmpty()) sorted else sorted.filter { it.id !in h }

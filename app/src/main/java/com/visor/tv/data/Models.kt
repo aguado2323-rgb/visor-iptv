@@ -8,8 +8,10 @@ import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.contentOrNull
 
+@Serializable
 data class Category(val id: String, val name: String)
 
+@Serializable
 data class LiveStream(
     val id: Int,
     val num: Int,
@@ -19,6 +21,7 @@ data class LiveStream(
     val epgId: String,
 )
 
+@Serializable
 data class VodStream(
     val id: Int,
     val name: String,
@@ -30,6 +33,7 @@ data class VodStream(
     val year: Int = 0,
 )
 
+@Serializable
 data class SeriesItem(
     val id: Int,
     val name: String,

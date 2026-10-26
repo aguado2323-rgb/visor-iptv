@@ -1,3 +1,5 @@
+@file:OptIn(kotlinx.serialization.ExperimentalSerializationApi::class)
+
 package com.visor.tv.data
 
 import android.content.Context
@@ -8,6 +10,12 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
+import kotlinx.serialization.KSerializer
+import kotlinx.serialization.builtins.ListSerializer
+import kotlinx.serialization.json.decodeFromStream
+import kotlinx.serialization.json.encodeToStream
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
@@ -44,6 +52,7 @@ class Repo(private val ctx: Context, private val http: OkHttpClient, private val
     val lastRefresh: Long get() = prefs.getLong("lastRefresh", 0L)
 
     private val mem = ConcurrentHashMap<String, Any>()
+    private val locks = ConcurrentHashMap<String, Mutex>()
     private val epgMem = ConcurrentHashMap<Int, Pair<Long, List<EpgEntry>>>()
     private val dir get() = File(ctx.cacheDir, "xt").also { it.mkdirs() }
     private val json = Json { ignoreUnknownKeys = true; isLenient = true }
@@ -55,13 +64,51 @@ class Repo(private val ctx: Context, private val http: OkHttpClient, private val
     private fun apiUrl(a: Account, params: String) =
         "${a.base}/player_api.php?username=${enc(a.user)}&password=${enc(a.pass)}$params"
 
+    /** Petición pequeña (cuenta, guía corta…): se lee directamente del flujo, sin pasar por un texto gigante. */
     private suspend fun fetch(a: Account, params: String): JsonElement = withContext(Dispatchers.IO) {
         val req = Request.Builder().url(apiUrl(a, params)).build()
         http.newCall(req).execute().use { r ->
             if (!r.isSuccessful) throw IOException("El servidor respondió ${r.code}")
-            val body = r.body?.string() ?: throw IOException("Respuesta vacía")
-            json.parseToJsonElement(body)
+            val body = r.body ?: throw IOException("Respuesta vacía")
+            body.byteStream().buffered(64 * 1024).use { json.decodeFromStream(JsonElement.serializer(), it) }
         }
+    }
+
+    /**
+     * Descarga directamente a un fichero temporal (sin cargar la respuesta entera en memoria) y comprueba
+     * que parece JSON completo. Devuelve el temporal; quien llama decide si lo da por bueno.
+     */
+    private fun downloadPart(a: Account, params: String, target: File): File {
+        val tmp = File(target.path + ".part")
+        http.newCall(Request.Builder().url(apiUrl(a, params)).build()).execute().use { r ->
+            if (!r.isSuccessful) throw IOException("El servidor respondió ${r.code}")
+            val body = r.body ?: throw IOException("Respuesta vacía")
+            tmp.outputStream().use { out -> body.byteStream().copyTo(out, 64 * 1024) }
+        }
+        if (!looksLikeJson(tmp)) { tmp.delete(); throw IOException("Respuesta no válida del servidor") }
+        return tmp
+    }
+
+    /** Primer y último carácter útil: [ … ] o { … }. Barato y evita guardar respuestas cortadas. */
+    private fun looksLikeJson(f: File): Boolean {
+        if (f.length() < 2) return false
+        java.io.RandomAccessFile(f, "r").use { raf ->
+            fun at(pos: Long): Int { raf.seek(pos); return raf.read() }
+            var i = 0L
+            var first = at(i)
+            while (first != -1 && Character.isWhitespace(first) && i < f.length() - 1) first = at(++i)
+            var j = f.length() - 1
+            var last = at(j)
+            while (last != -1 && Character.isWhitespace(last) && j > 0) last = at(--j)
+            return (first == '['.code && last == ']'.code) || (first == '{'.code && last == '}'.code)
+        }
+    }
+
+    private fun parseFile(f: File): JsonElement =
+        f.inputStream().buffered(64 * 1024).use { json.decodeFromStream(JsonElement.serializer(), it) }
+
+    private fun moveOver(from: File, to: File) {
+        if (!from.renameTo(to)) { to.delete(); if (!from.renameTo(to)) throw IOException("No se pudo guardar la caché") }
     }
 
     private fun cacheFile(params: String): File {
@@ -70,30 +117,64 @@ class Repo(private val ctx: Context, private val http: OkHttpClient, private val
         return File(dir, d.joinToString("") { "%02x".format(it) } + ".json")
     }
 
-    /** Pide a la red si la caché ha caducado; si la red falla, usa la caché aunque sea antigua. */
+    /**
+     * Pide a la red si la caché ha caducado; si la red falla, usa la caché aunque sea antigua.
+     * Las listas completas no caducan solas: las renueva [refreshAll] según Ajustes, así abrir la app
+     * nunca espera a una descarga grande.
+     */
     private suspend fun cached(params: String, ttlMs: Long): JsonElement = withContext(Dispatchers.IO) {
         val f = cacheFile(params)
-        val fresh = f.exists() && System.currentTimeMillis() - f.lastModified() < ttlMs
+        val ttl = if (params in FULL_LISTS) Long.MAX_VALUE else ttlMs
+        val fresh = f.exists() && System.currentTimeMillis() - f.lastModified() < ttl
         if (fresh) {
-            try { return@withContext json.parseToJsonElement(f.readText()) } catch (_: Exception) { }
+            try { return@withContext parseFile(f) } catch (_: Exception) { }
         }
         try {
-            val el = fetch(acc(), params)
-            f.writeText(el.toString())
+            val tmp = downloadPart(acc(), params, f)
+            val el = try { parseFile(tmp) } catch (e: Exception) { tmp.delete(); throw IOException("Respuesta no válida del servidor") }
+            moveOver(tmp, f)
             el
         } catch (e: kotlinx.coroutines.CancellationException) {
             throw e
         } catch (e: Exception) {
-            if (f.exists()) json.parseToJsonElement(f.readText()) else throw e
+            if (f.exists()) parseFile(f) else throw e
         }
     }
 
+    /**
+     * Lista grande guardada también en formato compacto (solo los campos que usa la app). Leerla al abrir
+     * la app es mucho más rápido y gasta menos memoria que volver a interpretar la respuesta del proveedor.
+     */
+    private suspend fun <T> compact(params: String, ser: KSerializer<T>, parse: (JsonElement) -> List<T>): List<T> =
+        withContext(Dispatchers.IO) {
+            val raw = cacheFile(params)
+            val c = File(raw.path.removeSuffix(".json") + ".c.json")
+            val listSer = ListSerializer(ser)
+            val usable = c.exists() && (!raw.exists() || raw.lastModified() <= c.lastModified())
+            if (usable) {
+                try { return@withContext c.inputStream().buffered(64 * 1024).use { json.decodeFromStream(listSer, it) } } catch (_: Exception) { c.delete() }
+            }
+            val el = cached(params, TTL_LIST)
+            val list = withContext(Dispatchers.Default) { parse(el) }
+            try {
+                val tmp = File(c.path + ".part")
+                tmp.outputStream().buffered(64 * 1024).use { json.encodeToStream(listSer, list, it) }
+                moveOver(tmp, c)
+            } catch (_: Exception) { }
+            list
+        }
+
+    /** Hay lista completa a mano (en memoria o en la caché compacta): las carpetas salen de ella sin ir a la red. */
+    private fun hasFull(key: String, params: String): Boolean =
+        mem.containsKey(key) || File(cacheFile(params).path.removeSuffix(".json") + ".c.json").exists()
+
+    /** Calcula una vez y guarda en memoria. Si dos pantallas lo piden a la vez, la segunda espera a la primera. */
     @Suppress("UNCHECKED_CAST")
     private suspend fun <T : Any> memo(key: String, block: suspend () -> T): T {
         mem[key]?.let { return it as T }
-        val v = block()
-        mem[key] = v
-        return v
+        return locks.getOrPut(key) { Mutex() }.withLock {
+            (mem[key] as T?) ?: block().also { mem[key] = it }
+        }
     }
 
     // ---------------- Cuenta ----------------
@@ -138,13 +219,26 @@ class Repo(private val ctx: Context, private val http: OkHttpClient, private val
         return try {
             withContext(Dispatchers.IO) {
                 val a = acc()
-                val fresh = FULL_LISTS.associateWith { fetch(a, it) } // todo o nada: si falla una, no se guarda ninguna
-                val keep = fresh.keys.map { cacheFile(it) }.toSet()
-                fresh.forEach { (params, el) -> cacheFile(params).writeText(el.toString()) }
-                // Las carpetas sueltas se vuelven a pedir cuando se abran
+                // Todo o nada: se descarga cada lista a un temporal, una a una (poca memoria),
+                // y solo si han llegado todas bien sustituyen a las anteriores.
+                val parts = mutableListOf<Pair<File, File>>()
+                try {
+                    for (params in FULL_LISTS) {
+                        val target = cacheFile(params)
+                        parts += downloadPart(a, params, target) to target
+                    }
+                } catch (e: Exception) {
+                    parts.forEach { it.first.delete() }
+                    throw e
+                }
+                parts.forEach { (tmp, target) -> moveOver(tmp, target) }
+                val keep = parts.map { it.second }.toSet()
+                // Las carpetas sueltas, fichas y versiones compactas se vuelven a crear cuando hagan falta
                 dir.listFiles()?.forEach { f -> if (f !in keep) f.delete() }
+                mem.clear(); epgMem.clear()
+                // Se preparan ya las listas compactas, para que al recargar las pantallas todo esté listo
+                try { allLive(); allVod(); allSeries() } catch (_: Exception) { }
             }
-            mem.clear(); epgMem.clear()
             prefs.edit().putLong("lastRefresh", System.currentTimeMillis()).apply()
             withContext(Dispatchers.Main) { version++ }
             true
@@ -166,9 +260,9 @@ class Repo(private val ctx: Context, private val http: OkHttpClient, private val
     private fun categories(el: JsonElement) = el.asArr().mapNotNull { it.asObj() }
         .map { Category(it.s("category_id"), it.s("category_name")) }
 
-    suspend fun liveCategories(): List<Category> = memo("lc") { categories(cached("&action=get_live_categories", TTL_LIST)) }
-    suspend fun vodCategories(): List<Category> = memo("vc") { categories(cached("&action=get_vod_categories", TTL_LIST)) }
-    suspend fun seriesCategories(): List<Category> = memo("sc") { categories(cached("&action=get_series_categories", TTL_LIST)) }
+    suspend fun liveCategories(): List<Category> = memo("lc") { compact("&action=get_live_categories", Category.serializer(), ::categories) }
+    suspend fun vodCategories(): List<Category> = memo("vc") { compact("&action=get_vod_categories", Category.serializer(), ::categories) }
+    suspend fun seriesCategories(): List<Category> = memo("sc") { compact("&action=get_series_categories", Category.serializer(), ::categories) }
 
     private fun parseLive(el: JsonElement) = el.asArr().mapNotNull { it.asObj() }.map {
         LiveStream(it.i("stream_id"), it.i("num"), it.s("name"), it.s("stream_icon"), it.s("category_id"), it.s("epg_channel_id"))
@@ -184,22 +278,26 @@ class Repo(private val ctx: Context, private val http: OkHttpClient, private val
             it.l("last_modified"), it.year(it.s("name")))
     }
 
+    // Carpetas: si la lista completa ya está a mano, se filtra al momento; si no, se pide solo esa carpeta.
     suspend fun liveStreams(cat: String): List<LiveStream> = memo("ls:$cat") {
-        parseLive(cached("&action=get_live_streams&category_id=${enc(cat)}", TTL_LIST))
+        if (hasFull("ls:*", P_LIVE)) withContext(Dispatchers.Default) { allLive().filter { it.categoryId == cat } }
+        else withContext(Dispatchers.Default) { parseLive(cached("&action=get_live_streams&category_id=${enc(cat)}", TTL_LIST)) }
     }
 
     suspend fun vodStreams(cat: String): List<VodStream> = memo("vs:$cat") {
-        parseVod(cached("&action=get_vod_streams&category_id=${enc(cat)}", TTL_LIST))
+        if (hasFull("vs:*", P_VOD)) withContext(Dispatchers.Default) { allVod().filter { it.categoryId == cat } }
+        else withContext(Dispatchers.Default) { parseVod(cached("&action=get_vod_streams&category_id=${enc(cat)}", TTL_LIST)) }
     }
 
     suspend fun series(cat: String): List<SeriesItem> = memo("ss:$cat") {
-        parseSeries(cached("&action=get_series&category_id=${enc(cat)}", TTL_LIST))
+        if (hasFull("ss:*", P_SERIES)) withContext(Dispatchers.Default) { allSeries().filter { it.categoryId == cat } }
+        else withContext(Dispatchers.Default) { parseSeries(cached("&action=get_series&category_id=${enc(cat)}", TTL_LIST)) }
     }
 
-    // Listas completas, para el buscador y las novedades. Se descargan una vez y quedan en caché.
-    suspend fun allLive(): List<LiveStream> = memo("ls:*") { parseLive(cached("&action=get_live_streams", TTL_LIST)) }
-    suspend fun allVod(): List<VodStream> = memo("vs:*") { parseVod(cached("&action=get_vod_streams", TTL_LIST)) }
-    suspend fun allSeries(): List<SeriesItem> = memo("ss:*") { parseSeries(cached("&action=get_series", TTL_LIST)) }
+    // Listas completas, para el buscador, las novedades y las carpetas. Se guardan en formato compacto.
+    suspend fun allLive(): List<LiveStream> = memo("ls:*") { compact(P_LIVE, LiveStream.serializer(), ::parseLive) }
+    suspend fun allVod(): List<VodStream> = memo("vs:*") { compact(P_VOD, VodStream.serializer(), ::parseVod) }
+    suspend fun allSeries(): List<SeriesItem> = memo("ss:*") { compact(P_SERIES, SeriesItem.serializer(), ::parseSeries) }
 
     /** Películas por título limpio (sin año, idioma ni calidad), para encontrar en tu lista las que recomienda TMDB. */
     suspend fun vodTitleIndex(): Map<String, List<VodStream>> = memo("vs:idx") {
@@ -398,9 +496,12 @@ class Repo(private val ctx: Context, private val http: OkHttpClient, private val
     }
 
     companion object {
+        private const val P_LIVE = "&action=get_live_streams"
+        private const val P_VOD = "&action=get_vod_streams"
+        private const val P_SERIES = "&action=get_series"
         private val FULL_LISTS = listOf(
             "&action=get_live_categories", "&action=get_vod_categories", "&action=get_series_categories",
-            "&action=get_live_streams", "&action=get_vod_streams", "&action=get_series",
+            P_LIVE, P_VOD, P_SERIES,
         )
         private const val TTL_LIST = 6 * 60 * 60_000L
         private const val TTL_INFO = 24 * 60 * 60_000L

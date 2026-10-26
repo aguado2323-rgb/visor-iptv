@@ -108,4 +108,7 @@ dependencies {
     implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.7.3")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.9.0")
     implementation("io.coil-kt:coil-compose:2.7.0")
+    // Instala los perfiles de compilación anticipada (de Compose y de la app) aunque la app no venga de una tienda:
+    // arranque y desplazamiento más fluidos desde la primera vez
+    implementation("androidx.profileinstaller:profileinstaller:1.4.1")
 }

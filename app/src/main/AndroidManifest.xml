@@ -25,6 +25,7 @@
         android:banner="@drawable/banner"
         android:label="Visor"
         android:supportsRtl="true"
+        android:largeHeap="true"
         android:theme="@android:style/Theme.Material.NoActionBar.Fullscreen">
 
         <activity

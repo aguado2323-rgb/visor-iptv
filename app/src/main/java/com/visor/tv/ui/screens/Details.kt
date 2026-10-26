@@ -101,11 +101,13 @@ private fun pick(tmdbFirst: Boolean, provider: String?, tmdb: String?): String? 
 private fun minutes(m: Int): String? = when { m <= 0 -> null; m >= 60 -> "${m / 60} h ${m % 60} min"; else -> "$m min" }
 
 /** Títulos de episodio que no dicen nada ("Episodio 3", "S01E03", el nombre de la serie…). */
+private val GENERIC_EP = Regex("""(?i)^(episod(e|io)|cap[ií]tulo|cap\.?|ep\.?)\s*\d+$""")
+private val SXXEXX = Regex("""(?i)s\d{1,2}\s*[ex]\s*\d{1,3}""")
+
 private fun genericEpisodeTitle(t: String, num: Int, series: String): Boolean {
     val x = t.trim()
     return x.isBlank() || x == num.toString() ||
-        Regex("""(?i)^(episod(e|io)|cap[ií]tulo|cap\.?|ep\.?)\s*\d+$""").matches(x) ||
-        Regex("""(?i)s\d{1,2}\s*[ex]\s*\d{1,3}""").containsMatchIn(x) ||
+        GENERIC_EP.matches(x) || SXXEXX.containsMatchIn(x) ||
         com.visor.tv.data.normalizeText(x) == com.visor.tv.data.normalizeText(series)
 }
 
