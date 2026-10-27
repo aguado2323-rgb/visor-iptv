@@ -288,7 +288,44 @@ fun HomeScreen(app: VisorApp, nav: Nav) = CompositionLocalProvider(LocalPalette 
                         heroArt.age?.let { Tag(it) }
                     }
                     if (heroArt.plot.isNotBlank()) T(heroArt.plot, SYNOPSIS.copy(fontSize = 13.sp, lineHeight = 19.sp), Color(0xFFE6E6E2), Modifier.padding(top = 8.dp), maxLines = 2)
-                    Spacer(Modifier.height(16.dp))
+                    Spacer(Modifier.height(14.dp))
+                    // Selector de novedades: al bajar desde el menú se llega aquí primero; ← → cambian de novedad
+                    // sin tener que ir a los extremos. Un ↓ más lleva a los botones.
+                    if (featured.size > 1) {
+                        Focusable(
+                            onClick = { featIdx = (featIdx + 1) % featured.size; lastKey = System.currentTimeMillis() },
+                            shape = RoundedCornerShape(50),
+                            modifier = Modifier
+                                .focusProperties { canFocus = !lower }
+                                .onPreviewKeyEvent { e ->
+                                    if (e.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
+                                    lastKey = System.currentTimeMillis()
+                                    when (e.key) {
+                                        Key.DirectionLeft -> { featIdx = (featIdx - 1 + featured.size) % featured.size; true }
+                                        Key.DirectionRight -> { featIdx = (featIdx + 1) % featured.size; true }
+                                        else -> false
+                                    }
+                                },
+                        ) { focused ->
+                            Row(
+                                Modifier.background(if (focused) Color.White.copy(alpha = 0.18f) else Color.Transparent)
+                                    .padding(horizontal = if (focused) 12.dp else 2.dp, vertical = 8.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                            ) {
+                                if (focused) T("‹", Type.label, Color.White)
+                                featured.indices.forEach { i ->
+                                    Box(
+                                        Modifier.size(if (i == featIdx) 20.dp else 7.dp, 7.dp).clip(CircleShape)
+                                            .background(if (i == featIdx) Color.White else Color.White.copy(alpha = if (focused) 0.6f else 0.4f))
+                                    )
+                                }
+                                if (focused) T("›", Type.label, Color.White)
+                                if (focused) T("  ${featIdx + 1} de ${featured.size}", Type.small, Color(0xFFD6D6D0))
+                            }
+                        }
+                        Spacer(Modifier.height(12.dp))
+                    }
                     val isFav = when (cur) { is VodStream -> app.favorites.contains("vod", cur.id); is SeriesItem -> app.favorites.contains("series", cur.id); else -> false }
                     val started = when (cur) {
                         is VodStream -> app.progress.entries.any { it.item.key == "vod:${cur.id}" && !it.done }
@@ -329,15 +366,6 @@ fun HomeScreen(app: VisorApp, nav: Nav) = CompositionLocalProvider(LocalPalette 
                                 is SeriesItem -> app.favorites.toggle(cur.toFav())
                             }
                         }
-                    }
-                }
-                // Puntos de posición
-                if (featured.size > 1) Row(
-                    Modifier.align(Alignment.TopEnd).padding(end = 48.dp, top = screenH - 176.dp).alpha(1f - lowerFrac),
-                    horizontalArrangement = Arrangement.spacedBy(5.dp),
-                ) {
-                    featured.indices.forEach { i ->
-                        Box(Modifier.size(if (i == featIdx) 18.dp else 6.dp, 6.dp).clip(CircleShape).background(if (i == featIdx) Color.White else Color.White.copy(alpha = 0.4f)))
                     }
                 }
             }
