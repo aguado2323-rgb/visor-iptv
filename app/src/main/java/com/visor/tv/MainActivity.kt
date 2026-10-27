@@ -55,6 +55,8 @@ import com.visor.tv.ui.LocalPalette
 import com.visor.tv.ui.T
 import com.visor.tv.ui.Type
 import com.visor.tv.ui.VisorTheme
+import com.visor.tv.ui.screens.CameraFullScreen
+import com.visor.tv.ui.screens.CamerasScreen
 import com.visor.tv.ui.screens.FavoritesScreen
 import com.visor.tv.ui.screens.GuideScreen
 import com.visor.tv.ui.screens.HomeScreen
@@ -75,13 +77,15 @@ import java.util.Locale
 
 enum class Tab(val label: String) {
     HOME("Inicio"), LIVE("TV"), GUIDE("Guía"), MOVIES("Películas"), SERIES("Series"),
-    FAVS("Favoritos"), REC("Grabaciones"), SETTINGS("Ajustes")
+    FAVS("Favoritos"), REC("Grabaciones"), CAMS("Cámaras"), SETTINGS("Ajustes")
 }
 
 sealed interface Route {
     data object Tabs : Route
     data class Movie(val vod: VodStream) : Route
     data class Show(val series: SeriesItem) : Route
+    /** Cámara a pantalla completa (posición en la lista de cámaras). */
+    data class Cam(val index: Int) : Route
 }
 
 /** Navegación mínima: una pila de pantallas y la pestaña activa. */
@@ -194,6 +198,7 @@ private fun Root(app: VisorApp, onExit: () -> Unit) {
                     // key: cada ficha empieza de cero aunque se abra una desde otra
                     is Route.Movie -> androidx.compose.runtime.key(r, nav.stack.size) { MovieDetail(app, nav, r.vod) }
                     is Route.Show -> androidx.compose.runtime.key(r, nav.stack.size) { SeriesDetail(app, r.series) }
+                    is Route.Cam -> androidx.compose.runtime.key(r, nav.stack.size) { CameraFullScreen(app, r.index) }
                 }
                 if (app.updater.prompt) UpdateDialog(app)
                 MiniPlayerWindow(Modifier.align(Alignment.BottomEnd).padding(24.dp))
@@ -245,6 +250,7 @@ private fun TabsScaffold(app: VisorApp, nav: Nav) {
                 Tab.SERIES -> SeriesScreen(app, nav)
                 Tab.FAVS -> FavoritesScreen(app, nav)
                 Tab.REC -> RecordingsScreen(app)
+                Tab.CAMS -> CamerasScreen(app, nav)
                 Tab.SETTINGS -> SettingsScreen(app, nav)
             }
         }

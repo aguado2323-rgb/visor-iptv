@@ -78,6 +78,10 @@ class SecureStore(context: Context) {
 
     fun saveAccount(a: Account?) = put(K_ACCOUNT, a?.let { json.encodeToString(it) })
 
+    /** Cámaras (sus direcciones suelen llevar usuario y contraseña, por eso van cifradas). */
+    fun loadCameras(): String? = get(K_CAMERAS)
+    fun saveCameras(value: String?) = put(K_CAMERAS, value)
+
     fun hasPin(): Boolean = get(K_PIN) != null
 
     fun setPin(pin: String?) {
@@ -106,5 +110,6 @@ class SecureStore(context: Context) {
         private const val TRANSFORM = "AES/GCM/NoPadding"
         private const val K_ACCOUNT = "account"
         private const val K_PIN = "pin"
+        private const val K_CAMERAS = "cameras"
     }
 }

@@ -57,6 +57,12 @@ Most IPTV apps on Fire TV are cluttered and slow. Visor focuses on what you use 
 - One-press **REC** while watching, from the guide, or with a **new timer**: pick any channel, then a show from its guide or exact hours, once, daily, weekdays or weekly, with start and end margins.
 - Choose where each recording is saved: internal storage or a USB drive. Each recording uses one extra connection to your provider.
 
+### Cameras
+- **Cámaras** tab with every home camera at once in a live mosaic (muted). **OK** opens one full screen with sound; **← →** jumps to the next camera, **Back** returns to the mosaic.
+- Add cameras by name and stream address (`rtsp://…`, or `http(s)://`), with an optional low-quality address for the mosaic. **☰ Menu** edits, reorders or deletes. Addresses are stored encrypted on the device.
+- Low-latency VLC playback over RTSP/TCP that reconnects on its own if a camera drops.
+- **Xiaomi cameras** don't offer a standard stream themselves: run [go2rtc](https://github.com/AlexxIT/go2rtc) on an always-on machine at home (Home Assistant, NAS, Raspberry Pi, PC), sign it into your Mi Home account, and add each camera here as `rtsp://<that-machine>:8554/<name>`.
+
 ### Everything else
 - **Manage folders** for TV, movies and series: hide the ones you never use, reorder them, or lock them with the PIN. From **☰ Menu** on any folder, or all at once in *Settings → Folders*. Hidden and locked folders stay out of search, *Latest* and Home; locked ones close again when you leave the app.
 - **Automatic list refresh** every 6 h, 12 h or 24 h, plus *Refresh now*.

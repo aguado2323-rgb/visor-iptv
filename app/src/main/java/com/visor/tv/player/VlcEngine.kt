@@ -15,7 +15,7 @@ import org.videolan.libvlc.util.VLCVideoLayout
  * Una sola instancia de LibVLC por combinación de opciones, compartida por todos los reproductores.
  * Crearla carga todos los módulos de VLC; reutilizarla hace que abrir un vídeo con VLC sea casi inmediato.
  */
-private object VlcShared {
+internal object VlcShared {
     private val instances = HashMap<String, LibVLC>()
 
     @Synchronized
