@@ -311,6 +311,12 @@ fun HomeScreen(app: VisorApp, nav: Nav, homeFocus: HomeFocus) = CompositionLocal
                             when {
                                 // ↑ desde los botones va a los puntos de las novedades (están abajo, pero van antes)
                                 e.key == Key.DirectionUp && homeFocus.dotsReady -> { try { homeFocus.dots.requestFocus() } catch (_: Exception) { }; true }
+                                // ↓ desde los botones va siempre a la fila de abajo (no a los puntos, que están a la derecha)
+                                e.key == Key.DirectionDown -> {
+                                    val first = when { cont.isNotEmpty() -> "cw"; movies.isNotEmpty() -> "mv"; shows.isNotEmpty() -> "sr"; else -> null }
+                                    first?.let { k -> try { rowFocus.getValue(k).requestFocus() } catch (_: Exception) { } }
+                                    first != null
+                                }
                                 // ← en el primer botón y → en el último pasan de novedad
                                 e.key == Key.DirectionLeft && btnIdx == 0 && featured.size > 1 -> { featIdx = (featIdx - 1 + featured.size) % featured.size; true }
                                 e.key == Key.DirectionRight && btnIdx == 2 && featured.size > 1 -> { featIdx = (featIdx + 1) % featured.size; true }
