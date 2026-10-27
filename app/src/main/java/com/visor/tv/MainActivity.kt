@@ -227,6 +227,7 @@ private fun TabsScaffold(app: VisorApp, nav: Nav) {
 
     // Inicio va a pantalla completa con el menú encima (fino y siempre oscuro); el resto, debajo de la cabecera.
     val home = nav.tab == Tab.HOME
+    val homeFocus = remember { com.visor.tv.ui.screens.HomeFocus(firstTab) }
     val density = androidx.compose.ui.platform.LocalDensity.current
     var headerH by remember { mutableStateOf(130.dp) }
 
@@ -237,7 +238,7 @@ private fun TabsScaffold(app: VisorApp, nav: Nav) {
                 .then(if (home) Modifier else Modifier.padding(start = 40.dp, end = 40.dp, top = headerH))
         ) {
             when (nav.tab) {
-                Tab.HOME -> HomeScreen(app, nav)
+                Tab.HOME -> HomeScreen(app, nav, homeFocus)
                 Tab.LIVE -> LiveScreen(app)
                 Tab.GUIDE -> GuideScreen(app)
                 Tab.MOVIES -> MoviesScreen(app, nav)
@@ -266,6 +267,13 @@ private fun TabsScaffold(app: VisorApp, nav: Nav) {
                         horizontalArrangement = Arrangement.spacedBy(if (home) 4.dp else 6.dp),
                         modifier = Modifier
                             .onFocusChanged { tabsFocused = it.hasFocus }
+                            // En Inicio, ↓ desde el menú va primero a los puntos de las novedades
+                            .onPreviewKeyEvent { e ->
+                                if (home && homeFocus.dotsReady && e.type == KeyEventType.KeyDown && e.key == Key.DirectionDown) {
+                                    try { homeFocus.dots.requestFocus() } catch (_: Exception) { }
+                                    true
+                                } else false
+                            }
                             // Al subir desde el contenido se vuelve a la pestaña en la que estás, no a la más cercana
                             .focusProperties { enter = { firstTab } },
                     ) {

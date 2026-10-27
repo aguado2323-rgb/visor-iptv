@@ -32,6 +32,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableLongStateOf
@@ -82,6 +83,12 @@ import kotlinx.coroutines.launch
 // Inicio de cine: arriba una portada a pantalla completa con las novedades (películas y series, rotando);
 // al bajar, el fondo pasa a ser lo que tengas seleccionado y las filas ocupan la pantalla.
 // Siempre en oscuro, sea cual sea el tema.
+
+/** Enlace de foco entre el menú de arriba y los puntos de las novedades de Inicio. */
+class HomeFocus(val tabs: FocusRequester) {
+    val dots = FocusRequester()
+    var dotsReady by mutableStateOf(false)
+}
 
 /** Lo que se pinta arriba: fondo, título y datos de lo destacado o de lo seleccionado. */
 private data class HomeArt(
@@ -208,7 +215,7 @@ private fun PillAction(text: String, canFocus: Boolean, focusRequester: FocusReq
 }
 
 @Composable
-fun HomeScreen(app: VisorApp, nav: Nav) = CompositionLocalProvider(LocalPalette provides OledPalette) {
+fun HomeScreen(app: VisorApp, nav: Nav, homeFocus: HomeFocus) = CompositionLocalProvider(LocalPalette provides OledPalette) {
     val ctx = LocalContext.current
     val scope = rememberCoroutineScope()
     val movies = load(app.repo.version, app.folders.version) { app.repo.latestVod(20) }.orNull().orEmpty()
@@ -288,44 +295,7 @@ fun HomeScreen(app: VisorApp, nav: Nav) = CompositionLocalProvider(LocalPalette 
                         heroArt.age?.let { Tag(it) }
                     }
                     if (heroArt.plot.isNotBlank()) T(heroArt.plot, SYNOPSIS.copy(fontSize = 13.sp, lineHeight = 19.sp), Color(0xFFE6E6E2), Modifier.padding(top = 8.dp), maxLines = 2)
-                    Spacer(Modifier.height(14.dp))
-                    // Selector de novedades: al bajar desde el menú se llega aquí primero; ← → cambian de novedad
-                    // sin tener que ir a los extremos. Un ↓ más lleva a los botones.
-                    if (featured.size > 1) {
-                        Focusable(
-                            onClick = { featIdx = (featIdx + 1) % featured.size; lastKey = System.currentTimeMillis() },
-                            shape = RoundedCornerShape(50),
-                            modifier = Modifier
-                                .focusProperties { canFocus = !lower }
-                                .onPreviewKeyEvent { e ->
-                                    if (e.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
-                                    lastKey = System.currentTimeMillis()
-                                    when (e.key) {
-                                        Key.DirectionLeft -> { featIdx = (featIdx - 1 + featured.size) % featured.size; true }
-                                        Key.DirectionRight -> { featIdx = (featIdx + 1) % featured.size; true }
-                                        else -> false
-                                    }
-                                },
-                        ) { focused ->
-                            Row(
-                                Modifier.background(if (focused) Color.White.copy(alpha = 0.18f) else Color.Transparent)
-                                    .padding(horizontal = if (focused) 12.dp else 2.dp, vertical = 8.dp),
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(6.dp),
-                            ) {
-                                if (focused) T("‹", Type.label, Color.White)
-                                featured.indices.forEach { i ->
-                                    Box(
-                                        Modifier.size(if (i == featIdx) 20.dp else 7.dp, 7.dp).clip(CircleShape)
-                                            .background(if (i == featIdx) Color.White else Color.White.copy(alpha = if (focused) 0.6f else 0.4f))
-                                    )
-                                }
-                                if (focused) T("›", Type.label, Color.White)
-                                if (focused) T("  ${featIdx + 1} de ${featured.size}", Type.small, Color(0xFFD6D6D0))
-                            }
-                        }
-                        Spacer(Modifier.height(12.dp))
-                    }
+                    Spacer(Modifier.height(16.dp))
                     val isFav = when (cur) { is VodStream -> app.favorites.contains("vod", cur.id); is SeriesItem -> app.favorites.contains("series", cur.id); else -> false }
                     val started = when (cur) {
                         is VodStream -> app.progress.entries.any { it.item.key == "vod:${cur.id}" && !it.done }
@@ -339,6 +309,8 @@ fun HomeScreen(app: VisorApp, nav: Nav) = CompositionLocalProvider(LocalPalette 
                             if (e.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
                             lastKey = System.currentTimeMillis()
                             when {
+                                // ↑ desde los botones va a los puntos de las novedades (están abajo, pero van antes)
+                                e.key == Key.DirectionUp && homeFocus.dotsReady -> { try { homeFocus.dots.requestFocus() } catch (_: Exception) { }; true }
                                 // ← en el primer botón y → en el último pasan de novedad
                                 e.key == Key.DirectionLeft && btnIdx == 0 && featured.size > 1 -> { featIdx = (featIdx - 1 + featured.size) % featured.size; true }
                                 e.key == Key.DirectionRight && btnIdx == 2 && featured.size > 1 -> { featIdx = (featIdx + 1) % featured.size; true }
@@ -364,6 +336,49 @@ fun HomeScreen(app: VisorApp, nav: Nav) = CompositionLocalProvider(LocalPalette 
                             when (cur) {
                                 is VodStream -> app.favorites.toggle(cur.toFav())
                                 is SeriesItem -> app.favorites.toggle(cur.toFav())
+                            }
+                        }
+                    }
+                }
+                // Puntos de las novedades, abajo a la derecha. En el orden del mando van entre el menú y los botones:
+                // menú ↓ puntos (← → cambian de novedad) ↓ botones; desde los botones, ↑ vuelve a los puntos.
+                if (featured.size > 1) {
+                    if (!lower) DisposableEffect(Unit) {
+                        homeFocus.dotsReady = true
+                        onDispose { homeFocus.dotsReady = false }
+                    }
+                    Focusable(
+                        onClick = { featIdx = (featIdx + 1) % featured.size; lastKey = System.currentTimeMillis() },
+                        focusRequester = homeFocus.dots,
+                        shape = RoundedCornerShape(50),
+                        modifier = Modifier
+                            .align(Alignment.TopEnd)
+                            .padding(end = 40.dp, top = screenH - 184.dp)
+                            .alpha(1f - lowerFrac)
+                            .focusProperties { canFocus = !lower }
+                            .onPreviewKeyEvent { e ->
+                                if (e.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
+                                lastKey = System.currentTimeMillis()
+                                when (e.key) {
+                                    Key.DirectionLeft -> { featIdx = (featIdx - 1 + featured.size) % featured.size; true }
+                                    Key.DirectionRight -> { featIdx = (featIdx + 1) % featured.size; true }
+                                    Key.DirectionDown -> { try { playBtn.requestFocus() } catch (_: Exception) { }; true }
+                                    Key.DirectionUp -> { try { homeFocus.tabs.requestFocus() } catch (_: Exception) { }; true }
+                                    else -> false
+                                }
+                            },
+                    ) { focused ->
+                        Row(
+                            Modifier.background(if (focused) Color.White.copy(alpha = 0.18f) else Color.Transparent)
+                                .padding(horizontal = 8.dp, vertical = 8.dp),
+                            horizontalArrangement = Arrangement.spacedBy(5.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            featured.indices.forEach { i ->
+                                Box(
+                                    Modifier.size(if (i == featIdx) 18.dp else 6.dp, 6.dp).clip(CircleShape)
+                                        .background(if (i == featIdx) Color.White else Color.White.copy(alpha = if (focused) 0.7f else 0.4f))
+                                )
                             }
                         }
                     }
