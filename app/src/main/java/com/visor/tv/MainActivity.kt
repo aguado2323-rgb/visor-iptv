@@ -227,6 +227,9 @@ private fun TabsScaffold(app: VisorApp, nav: Nav) {
 
     // Inicio va a pantalla completa con el menú encima (fino y siempre oscuro); el resto, debajo de la cabecera.
     val home = nav.tab == Tab.HOME
+    val guide = nav.tab == Tab.GUIDE
+    // Inicio y Guía: menú fino sobre fondo oscuro
+    val slim = home || guide
     val homeFocus = remember { com.visor.tv.ui.screens.HomeFocus(firstTab) }
     val density = androidx.compose.ui.platform.LocalDensity.current
     var headerH by remember { mutableStateOf(130.dp) }
@@ -235,7 +238,14 @@ private fun TabsScaffold(app: VisorApp, nav: Nav) {
         Box(
             Modifier
                 .fillMaxSize()
-                .then(if (home) Modifier else Modifier.padding(start = 40.dp, end = 40.dp, top = headerH))
+                .then(
+                    when {
+                        home -> Modifier
+                        // La guía usa el menú fino (como Inicio) para dejar sitio a la ventana y la parrilla
+                        guide -> Modifier.padding(top = 56.dp)
+                        else -> Modifier.padding(start = 40.dp, end = 40.dp, top = headerH)
+                    }
+                )
         ) {
             when (nav.tab) {
                 Tab.HOME -> HomeScreen(app, nav, homeFocus)
@@ -249,22 +259,22 @@ private fun TabsScaffold(app: VisorApp, nav: Nav) {
             }
         }
 
-        androidx.compose.runtime.CompositionLocalProvider(LocalPalette provides if (home) com.visor.tv.ui.OledPalette else p) {
+        androidx.compose.runtime.CompositionLocalProvider(LocalPalette provides if (slim) com.visor.tv.ui.OledPalette else p) {
             val hp = LocalPalette.current
             Row(
                 Modifier
                     .fillMaxWidth()
-                    .onSizeChanged { if (!home) headerH = with(density) { it.height.toDp() } + 18.dp }
-                    .padding(start = if (home) 44.dp else 40.dp, end = if (home) 48.dp else 40.dp, top = if (home) 20.dp else 28.dp),
+                    .onSizeChanged { if (!slim) headerH = with(density) { it.height.toDp() } + 18.dp }
+                    .padding(start = if (slim) 44.dp else 40.dp, end = if (slim) 48.dp else 40.dp, top = if (slim) 20.dp else 28.dp),
                 verticalAlignment = Alignment.Top,
             ) {
                 Column(Modifier.weight(1f)) {
-                    if (!home) {
+                    if (!slim) {
                         T(nav.tab.label, Type.title)
                         Spacer(Modifier.height(10.dp))
                     }
                     LazyRow(
-                        horizontalArrangement = Arrangement.spacedBy(if (home) 4.dp else 6.dp),
+                        horizontalArrangement = Arrangement.spacedBy(if (slim) 4.dp else 6.dp),
                         modifier = Modifier
                             .onFocusChanged { tabsFocused = it.hasFocus }
                             // En Inicio, ↓ desde el menú va primero a los puntos de las novedades
@@ -283,9 +293,9 @@ private fun TabsScaffold(app: VisorApp, nav: Nav) {
                                 onClick = { nav.tab = t },
                                 onFocused = { nav.tab = t },
                                 focusRequester = if (i == nav.tab.ordinal) firstTab else null,
-                                shape = androidx.compose.foundation.shape.RoundedCornerShape(if (home) 50 else 20),
+                                shape = androidx.compose.foundation.shape.RoundedCornerShape(if (slim) 50 else 20),
                             ) { focused ->
-                                if (home) {
+                                if (slim) {
                                     // Menú fino sobre la imagen: píldora para la pestaña activa
                                     Box(
                                         Modifier
@@ -319,7 +329,7 @@ private fun TabsScaffold(app: VisorApp, nav: Nav) {
                         TvButton("⛶ ${mini.title}", onClick = { MiniPlayer.expand(ctx) })
                         TvButton("✕", onClick = { MiniPlayer.stop() })
                     }
-                    T(now, if (home) Type.label.copy(fontSize = 14.sp) else Type.h2, if (home) Color.White else hp.text)
+                    T(now, if (slim) Type.label.copy(fontSize = 14.sp) else Type.h2, if (slim) Color.White else hp.text)
                 }
             }
         }
