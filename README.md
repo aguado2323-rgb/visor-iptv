@@ -31,6 +31,8 @@ Most IPTV apps on Fire TV are cluttered and slow. Visor focuses on what you use 
 ### Live TV
 - Channels grouped in your provider's folders, with what's on now from the EPG.
 - **Channel guide inside the player:** press **OK** or **←** while watching. It has two tabs, *This folder* and *Recent* (your last 15 channels), with progress bars and what's on next. **↑ ↓** zaps directly.
+- **Guide with a live window:** the programme info on the left and a small live TV on the right. Moving through the grid does not change channel (no extra load on your provider): **OK** puts that channel in the window, **OK** again goes full screen. Folders as pills, red "now" line and progress on what's on. **⏪ ⏩** change day, **⏯** jumps back to now.
+- **Pause and rewind live TV** (ExoPlayer): the channel is kept in memory, about 3 minutes in HD. **⏯** pauses, **⏪ ⏩** move 10 s, **● Live** jumps back. If a pause goes beyond the buffer, playback returns to live with a notice.
 - **Full guide:** Visor downloads your provider's complete XMLTV guide once a day, so the grid covers up to 4 days ahead (and the last 6 hours). Move by 2 hours or by day, or with **⏪ ⏩** on the remote. Press OK on a show to watch it if it's on, or to record it once, daily or weekly.
 - **Search the guide** by show name across all your channels ("when is the match on?").
 - Channels without guide data can still be browsed and played from the grid. If your provider has no XMLTV guide, Visor falls back to the short per-channel guide.
