@@ -26,10 +26,18 @@ import okhttp3.OkHttpClient
 @OptIn(UnstableApi::class)
 class ExoEngine(
     context: Context,
-    http: OkHttpClient,
+    private val http: OkHttpClient,
     audioLang: String?,
     subsLang: String?,
+    /** Guardar el directo en memoria para poder pausarlo y rebobinarlo (solo canales en MPEG-TS). */
+    private val allowTimeshift: Boolean = false,
 ) : PlayerEngine {
+
+    override var onNotice: ((String) -> Unit)? = null
+    private var ts: TimeshiftBuffer? = null
+    private var delayMs = 0L          // por detrás del directo, sin contar la pausa en curso
+    private var pausedAt = 0L         // momento en que se pausó (0 = no está en pausa)
+    private val main = android.os.Handler(android.os.Looper.getMainLooper())
 
     override var onError: ((String) -> Unit)? = null
     override var onEnded: (() -> Unit)? = null
@@ -53,7 +61,11 @@ class ExoEngine(
             .build()
         player.addListener(object : Player.Listener {
             override fun onPlayerError(error: PlaybackException) {
-                if (error.errorCode == PlaybackException.ERROR_CODE_BEHIND_LIVE_WINDOW) {
+                if (ts != null) {
+                    // Directo guardado en memoria: se retoma desde el directo en vez de mostrar un error
+                    onNotice?.invoke("Reconectando con el canal…")
+                    goLive()
+                } else if (error.errorCode == PlaybackException.ERROR_CODE_BEHIND_LIVE_WINDOW) {
                     player.seekToDefaultPosition()
                     player.prepare()
                 } else {
@@ -68,6 +80,13 @@ class ExoEngine(
     }
 
     override fun prepare(url: String, startMs: Long, isLive: Boolean) {
+        ts?.close(); ts = null
+        delayMs = 0L; pausedAt = 0L
+        if (isLive && allowTimeshift && !url.substringBefore('?').endsWith(".m3u8")) {
+            ts = TimeshiftBuffer(http, url, TimeshiftBuffer.defaultCapacity())
+            playFrom(0L)
+            return
+        }
         val item = MediaItem.Builder()
             .setUri(url)
             .apply { if (url.substringBefore('?').endsWith(".m3u8")) setMimeType(MimeTypes.APPLICATION_M3U8) }
@@ -77,9 +96,63 @@ class ExoEngine(
         player.playWhenReady = true
     }
 
-    override fun togglePause() { player.playWhenReady = !player.playWhenReady }
+    /** Reproduce el directo guardado desde la posición absoluta [pos]. */
+    private fun playFrom(pos: Long) {
+        val buf = ts ?: return
+        val factory = TimeshiftDataSource.Factory(buf) {
+            // Pausa más larga que lo guardado: se sigue desde el directo
+            main.post {
+                delayMs = 0L; pausedAt = 0L
+                onNotice?.invoke("La pausa superó el margen: vuelves al directo")
+            }
+        }
+        val source = androidx.media3.exoplayer.source.ProgressiveMediaSource.Factory(factory)
+            .createMediaSource(MediaItem.fromUri("timeshift://live?pos=$pos"))
+        player.setMediaSource(source, true)
+        player.prepare()
+        player.playWhenReady = true
+    }
+
+    override val timeshift: Boolean get() = ts != null
+
+    override fun liveDelayMs(): Long {
+        if (ts == null) return 0
+        val paused = if (pausedAt > 0) android.os.SystemClock.elapsedRealtime() - pausedAt else 0L
+        return (delayMs + paused).coerceAtMost(liveWindowMs())
+    }
+
+    override fun liveWindowMs(): Long = ts?.windowMs() ?: 0L
+
+    override fun goLive() {
+        val buf = ts ?: return
+        delayMs = 0L; pausedAt = 0L
+        playFrom(buf.positionAgo(1_500))
+    }
+
+    override fun togglePause() {
+        if (ts != null) {
+            if (player.playWhenReady) {
+                pausedAt = android.os.SystemClock.elapsedRealtime()
+            } else if (pausedAt > 0) {
+                delayMs = liveDelayMs(); pausedAt = 0L
+            }
+        }
+        player.playWhenReady = !player.playWhenReady
+    }
     override fun isPlaying(): Boolean = player.playWhenReady
-    override fun seekBy(ms: Long) { player.seekTo((player.currentPosition + ms).coerceAtLeast(0)) }
+    override fun seekBy(ms: Long) {
+        val buf = ts
+        if (buf != null) {
+            // En directo: retroceder o avanzar dentro de lo guardado
+            val target = (liveDelayMs() - ms).coerceIn(0L, liveWindowMs())
+            pausedAt = 0L
+            if (target < 1_000) { goLive(); return }
+            delayMs = target
+            playFrom(buf.positionAgo(target))
+            return
+        }
+        player.seekTo((player.currentPosition + ms).coerceAtLeast(0))
+    }
     override fun position(): Long = player.currentPosition
     override fun duration(): Long = player.duration.takeIf { it != C.TIME_UNSET } ?: 0L
 
@@ -127,7 +200,10 @@ class ExoEngine(
         } else select(id, C.TRACK_TYPE_TEXT)
     }
 
-    override fun release() = player.release()
+    override fun release() {
+        ts?.close(); ts = null
+        player.release()
+    }
 
     private var aspectMode by androidx.compose.runtime.mutableStateOf(com.visor.tv.data.Aspect.FIT)
     override fun setAspect(a: com.visor.tv.data.Aspect) { aspectMode = a }

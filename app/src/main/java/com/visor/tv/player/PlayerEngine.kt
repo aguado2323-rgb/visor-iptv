@@ -23,6 +23,20 @@ interface PlayerEngine {
     /** null desactiva los subtítulos. */
     fun selectSubtitle(id: String?)
     fun release()
+
+    // ---- Pausar y rebobinar el directo (solo ExoPlayer, solo en el reproductor a pantalla completa) ----
+    /** true si este reproductor guarda el directo en memoria para pausarlo y rebobinarlo. */
+    val timeshift: Boolean get() = false
+    /** Cuánto va por detrás del directo (ms); 0 = en directo. */
+    fun liveDelayMs(): Long = 0
+    /** Cuánto se puede ir hacia atrás ahora mismo (ms). */
+    fun liveWindowMs(): Long = 0
+    /** Vuelve al directo. */
+    fun goLive() {}
+    /** Avisos para mostrar en pantalla ("volviendo al directo"…). */
+    var onNotice: ((String) -> Unit)?
+        get() = null
+        set(_) {}
     /** Formato de imagen (ajustar, rellenar, zoom). */
     fun setAspect(a: com.visor.tv.data.Aspect)
 

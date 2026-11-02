@@ -114,6 +114,11 @@ private fun PlayerScreen(app: VisorApp, onExit: () -> Unit) {
     var playing by remember { mutableStateOf(true) }
     var lastKey by remember { mutableLongStateOf(System.currentTimeMillis()) }
     var tracksVersion by remember { mutableStateOf(0) }
+    // Pausar y rebobinar el directo
+    var liveDelay by remember { mutableLongStateOf(0L) }
+    var liveWindow by remember { mutableLongStateOf(0L) }
+    var notice by remember { mutableStateOf<String?>(null) }
+    var noticeAt by remember { mutableLongStateOf(0L) }
     val rootFocus = remember { FocusRequester() }
     val firstButton = remember { FocusRequester() }
     val seekFocus = remember { FocusRequester() }
@@ -122,7 +127,8 @@ private fun PlayerScreen(app: VisorApp, onExit: () -> Unit) {
     val engine: PlayerEngine = remember(engineType) {
         val audio = app.settings.audioLang.code
         val subs = app.settings.subsDefault.code
-        (if (engineType == Engine.VLC) VlcEngine(ctx, audio, subs) else ExoEngine(ctx, app.http, audio, subs))
+        (if (engineType == Engine.VLC) VlcEngine(ctx, audio, subs)
+         else ExoEngine(ctx, app.http, audio, subs, allowTimeshift = app.queue.current?.kind == "live"))
             .also { it.setAspect(app.settings.aspect) }
     }
 
@@ -149,6 +155,7 @@ private fun PlayerScreen(app: VisorApp, onExit: () -> Unit) {
 
     DisposableEffect(engine) {
         engine.onError = { error = it; overlay = true }
+        engine.onNotice = { notice = it; noticeAt = System.currentTimeMillis() }
         engine.onEnded = {
             saveProgress()
             if (hasNext() && !nextDismissed) playNext()
@@ -172,6 +179,8 @@ private fun PlayerScreen(app: VisorApp, onExit: () -> Unit) {
         while (true) {
             delay(500)
             pos = engine.position(); dur = engine.duration(); playing = engine.isPlaying()
+            liveDelay = engine.liveDelayMs(); liveWindow = engine.liveWindowMs()
+            if (notice != null && System.currentTimeMillis() - noticeAt > 4000) notice = null
             if (overlay && !panel && error == null && System.currentTimeMillis() - lastKey > 6000) overlay = false
             if (guide && System.currentTimeMillis() - lastKey > 15000) guide = false
             // Últimos 20 s del capítulo (créditos): ofrece el siguiente
@@ -235,7 +244,7 @@ private fun PlayerScreen(app: VisorApp, onExit: () -> Unit) {
                     Key.DirectionLeft -> { if (isLive) guide = true else { engine.seekBy(-10_000); overlay = true }; true }
                     Key.DirectionRight -> { if (!isLive) engine.seekBy(30_000); overlay = true; true }
                     Key.MediaPlayPause, Key.MediaPlay, Key.MediaPause -> { engine.togglePause(); true }
-                    Key.MediaFastForward -> { engine.seekBy(30_000); true }
+                    Key.MediaFastForward -> { engine.seekBy(if (isLive) 10_000 else 30_000); true }
                     Key.MediaRewind -> { engine.seekBy(-10_000); true }
                     Key.Menu -> { overlay = true; if (!isLive) panel = true; true }
                     // En directo, OK abre la guía de canales sin salir del vídeo; ≡ Menú muestra los controles.
@@ -247,6 +256,16 @@ private fun PlayerScreen(app: VisorApp, onExit: () -> Unit) {
             .focusable(),
     ) {
         key(engine) { engine.VideoSurface(Modifier.fillMaxSize()) }
+
+        // Por detrás del directo (pausa o rebobinado): aviso arriba a la derecha
+        if (isLive && engine.timeshift && liveDelay >= 2_000) {
+            Row(Modifier.padding(28.dp).align(Alignment.TopEnd)) {
+                Pill((if (!playing) "⏸  " else "") + "−" + mmss(liveDelay) + " del directo", Color.Black.copy(alpha = 0.7f), Color.White)
+            }
+        }
+        notice?.let { msg ->
+            Row(Modifier.padding(top = 70.dp, end = 28.dp).align(Alignment.TopEnd)) { Pill(msg, Color.Black.copy(alpha = 0.75f), Color.White) }
+        }
 
         val rec = app.recordings.activeFor(item.id).takeIf { isLive }
         if (rec != null) {
@@ -271,6 +290,11 @@ private fun PlayerScreen(app: VisorApp, onExit: () -> Unit) {
                 if (isLive) {
                     val e = epgNow
                     T(if (e != null) "${hm(e.start)} – ${hm(e.end)} · ${e.title}" else "En directo", Type.small, p.muted)
+                    if (engine.timeshift) T(
+                        if (liveDelay >= 2_000) "Vas ${mmss(liveDelay)} por detrás del directo · ⏪ ⏩ 10 s · puedes volver hasta ${mmss(liveWindow)}"
+                        else "En directo · ⏯ pausa y ⏪ rebobina (hasta ${mmss(liveWindow.coerceAtLeast(0))} guardados)",
+                        Type.small, p.muted,
+                    )
                     T("OK o ← guía de canales · ↑ ↓ cambiar de canal · ≡ opciones", Type.small, p.muted)
                     if (e != null) {
                         val frac = ((System.currentTimeMillis() - e.start).toFloat() / (e.end - e.start)).coerceIn(0f, 1f)
@@ -290,6 +314,12 @@ private fun PlayerScreen(app: VisorApp, onExit: () -> Unit) {
                     if (!isLive) {
                         TvButton("−10 s", onClick = { engine.seekBy(-10_000) })
                         TvButton("+30 s", onClick = { engine.seekBy(30_000) })
+                    } else if (engine.timeshift) {
+                        TvButton("−10 s", onClick = { engine.seekBy(-10_000) })
+                        if (liveDelay >= 2_000) {
+                            TvButton("+10 s", onClick = { engine.seekBy(10_000) })
+                            TvButton("● Directo", dot = p.rec, onClick = { engine.goLive() })
+                        }
                     }
                     TvButton("Audio y subtítulos", onClick = { panel = !panel; tracksVersion++ })
                     // Ajustar → Rellenar → Zoom; se recuerda para la próxima vez
@@ -589,3 +619,7 @@ private fun SeekBar(pos: Long, dur: Long, fr: FocusRequester, onSeekTo: (Long) -
         }
     }
 }
+
+
+/** 83 000 ms → "1:23". */
+private fun mmss(ms: Long): String { val t = ms / 1000; return "%d:%02d".format(t / 60, t % 60) }
