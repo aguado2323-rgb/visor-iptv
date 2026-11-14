@@ -74,7 +74,7 @@ import java.util.Date
 import java.util.Locale
 
 enum class Tab(val label: String) {
-    HOME("Inicio"), LIVE("TV"), GUIDE("Guía"), MOVIES("Películas"), SERIES("Series"),
+    HOME("Inicio"), LIVE("TV"), GUIDE("Guía"), MOVIES("Películas"), SERIES("Series"), DISCOVER("Descubrir"),
     FAVS("Favoritos"), REC("Grabaciones"), SETTINGS("Ajustes")
 }
 
@@ -82,6 +82,10 @@ sealed interface Route {
     data object Tabs : Route
     data class Movie(val vod: VodStream) : Route
     data class Show(val series: SeriesItem) : Route
+    /** Ficha de un título de Descubrir (addons). */
+    data class Addon(val meta: com.visor.tv.addons.MetaPreview) : Route
+    /** Addons, cuentas debrid y preferencias de fuentes. */
+    data object DiscoverSetup : Route
 }
 
 /** Navegación mínima: una pila de pantallas y la pestaña activa. */
@@ -194,6 +198,8 @@ private fun Root(app: VisorApp, onExit: () -> Unit) {
                     // key: cada ficha empieza de cero aunque se abra una desde otra
                     is Route.Movie -> androidx.compose.runtime.key(r, nav.stack.size) { MovieDetail(app, nav, r.vod) }
                     is Route.Show -> androidx.compose.runtime.key(r, nav.stack.size) { SeriesDetail(app, r.series) }
+                    is Route.Addon -> androidx.compose.runtime.key(r, nav.stack.size) { com.visor.tv.ui.screens.AddonDetail(app, nav, r.meta) }
+                    Route.DiscoverSetup -> com.visor.tv.ui.screens.DiscoverSetupScreen(app, nav)
                 }
                 if (app.updater.prompt) UpdateDialog(app)
                 MiniPlayerWindow(Modifier.align(Alignment.BottomEnd).padding(24.dp))
@@ -228,8 +234,9 @@ private fun TabsScaffold(app: VisorApp, nav: Nav) {
     // Inicio va a pantalla completa con el menú encima (fino y siempre oscuro); el resto, debajo de la cabecera.
     val home = nav.tab == Tab.HOME
     val guide = nav.tab == Tab.GUIDE
-    // Inicio y Guía: menú fino sobre fondo oscuro
-    val slim = home || guide
+    val discover = nav.tab == Tab.DISCOVER
+    // Inicio, Guía y Descubrir: menú fino sobre fondo oscuro
+    val slim = home || guide || discover
     val homeFocus = remember { com.visor.tv.ui.screens.HomeFocus(firstTab) }
     val density = androidx.compose.ui.platform.LocalDensity.current
     var headerH by remember { mutableStateOf(130.dp) }
@@ -240,7 +247,7 @@ private fun TabsScaffold(app: VisorApp, nav: Nav) {
                 .fillMaxSize()
                 .then(
                     when {
-                        home -> Modifier
+                        home || discover -> Modifier
                         // La guía usa el menú fino (como Inicio) para dejar sitio a la ventana y la parrilla
                         guide -> Modifier.padding(top = 56.dp)
                         else -> Modifier.padding(start = 40.dp, end = 40.dp, top = headerH)
@@ -253,6 +260,7 @@ private fun TabsScaffold(app: VisorApp, nav: Nav) {
                 Tab.GUIDE -> GuideScreen(app)
                 Tab.MOVIES -> MoviesScreen(app, nav)
                 Tab.SERIES -> SeriesScreen(app, nav)
+                Tab.DISCOVER -> com.visor.tv.ui.screens.DiscoverScreen(app, nav)
                 Tab.FAVS -> FavoritesScreen(app, nav)
                 Tab.REC -> RecordingsScreen(app)
                 Tab.SETTINGS -> SettingsScreen(app, nav)

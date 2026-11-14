@@ -45,6 +45,9 @@ class VisorApp : Application(), ImageLoaderFactory {
         private set
     lateinit var epg: com.visor.tv.data.EpgStore
         private set
+    /** Sección Descubrir: addons compatibles con Stremio y cuentas debrid. */
+    lateinit var discover: com.visor.tv.addons.Discover
+        private set
     /** La app abre una pantalla suya (reproductor): no cuenta como salir para volver a bloquear carpetas. */
     @Volatile var internalNav = false
     val queue = PlaybackQueue()
@@ -74,6 +77,7 @@ class VisorApp : Application(), ImageLoaderFactory {
         recents = com.visor.tv.data.RecentChannels(this)
         folders = com.visor.tv.data.Folders(this)
         epg = com.visor.tv.data.EpgStore(this, http)
+        discover = com.visor.tv.addons.Discover(this, http, vault, settings)
         createChannels()
     }
 

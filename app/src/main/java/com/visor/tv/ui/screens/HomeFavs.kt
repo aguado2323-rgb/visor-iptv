@@ -88,11 +88,11 @@ fun FavoritesScreen(app: VisorApp, nav: Nav) {
     var section by rememberSaveable { mutableStateOf(0) }
     var menuFor by remember { mutableStateOf<LiveStream?>(null) }
     var timerFor by remember { mutableStateOf<LiveStream?>(null) }
-    val labels = listOf("Canales", "Películas", "Series")
+    val labels = listOf("Canales", "Películas", "Series", "Descubrir")
     Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             labels.forEachIndexed { i, l ->
-                val n = app.favorites.of(listOf("live", "vod", "series")[i]).size
+                val n = app.favorites.of(listOf("live", "vod", "series", "addon")[i]).size
                 TvButton("$l ($n)", selected = section == i, onClick = { section = i }, onFocused = { section = i })
             }
         }
@@ -107,10 +107,15 @@ fun FavoritesScreen(app: VisorApp, nav: Nav) {
                 if (list.isEmpty()) Empty("Sin películas favoritas. En Películas, pulsa ≡ sobre una película.")
                 else MovieGrid(app, nav, list)
             }
-            else -> {
+            2 -> {
                 val list = app.favorites.of("series").map { it.toSeries() }
                 if (list.isEmpty()) Empty("Sin series favoritas. En Series, pulsa ≡ sobre una serie.")
                 else SeriesGrid(app, nav, list)
+            }
+            else -> {
+                val list = app.favorites.of("addon").map { it.toMeta() }
+                if (list.isEmpty()) Empty("Nada guardado de Descubrir. En una ficha, pulsa Mi lista, o ≡ sobre un póster.")
+                else MetaGrid(app, nav, list, prefix = "fav")
             }
         }
     }

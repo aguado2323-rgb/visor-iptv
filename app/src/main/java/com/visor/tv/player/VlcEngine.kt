@@ -23,6 +23,9 @@ private object VlcShared {
         instances.getOrPut(opts.joinToString("|")) { LibVLC(context.applicationContext, ArrayList(opts)) }
 }
 
+/** Tipo "subtítulo" de las pistas externas de libVLC. */
+private const val SLAVE_SUBTITLE = 0
+
 /** Motor VLC: útil con streams o códecs que ExoPlayer no abre bien. */
 class VlcEngine(
     context: Context,
@@ -58,7 +61,7 @@ class VlcEngine(
         })
     }
 
-    override fun prepare(url: String, startMs: Long, isLive: Boolean) {
+    override fun prepare(url: String, startMs: Long, isLive: Boolean, subs: List<ExternalSub>) {
         val media = Media(libVlc, Uri.parse(url))
         media.addOption(":network-caching=" + if (isLive) "2000" else "1500")
         media.addOption(":http-user-agent=" + VisorApp.USER_AGENT)
@@ -67,6 +70,8 @@ class VlcEngine(
         pendingSeek = if (isLive) 0 else startMs
         subsApplied = false
         mp.play()
+        // Subtítulos externos: se añaden como pistas, sin activarlos (se eligen en "Audio y subtítulos")
+        subs.forEach { s -> try { mp.addSlave(SLAVE_SUBTITLE, Uri.parse(s.url), false) } catch (_: Exception) { } }
     }
 
     override fun togglePause() { if (mp.isPlaying()) mp.pause() else mp.play() }

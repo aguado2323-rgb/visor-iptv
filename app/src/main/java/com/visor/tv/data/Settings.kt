@@ -18,6 +18,10 @@ enum class SortBy(val label: String) {
     YEAR_DESC("Año: más nuevas"), YEAR_ASC("Año: más antiguas"),
     AZ("Alfabético A–Z"), ZA("Alfabético Z–A"),
 }
+/** Sección Descubrir: calidad máxima de las fuentes que se eligen solas. */
+enum class MaxQuality(val label: String, val height: Int) { UHD("4K", 2160), FHD("1080p", 1080), HD("720p", 720) }
+/** Sección Descubrir: tamaño máximo de archivo. */
+enum class MaxSize(val label: String, val gb: Int) { ANY("Sin límite", 0), G40("40 GB", 40), G20("20 GB", 20), G10("10 GB", 10), G5("5 GB", 5), G2("2 GB", 2) }
 enum class SubsDefault(val label: String, val code: String?) { OFF("Desactivados", null), ES("Español", "es"), EN("Inglés", "en") }
 
 /** Ajustes no sensibles. Son estado de Compose, así que la interfaz se actualiza al cambiarlos. */
@@ -55,6 +59,24 @@ class Settings(context: Context) {
         private set
     var refreshEvery by mutableStateOf(load("refresh", RefreshEvery.H12))
         private set
+
+    // ---- Descubrir: cómo se elige la fuente ----
+    var maxQuality by mutableStateOf(load("dMaxQuality", MaxQuality.UHD))
+        private set
+    var maxSize by mutableStateOf(load("dMaxSize", MaxSize.ANY))
+        private set
+    var spanishFirst by mutableStateOf(p.getBoolean("dSpanish", true))
+        private set
+    var hideCam by mutableStateOf(p.getBoolean("dHideCam", true))
+        private set
+    /** OK en "Ver" elige sola la mejor fuente; si no, siempre se pregunta. */
+    var autoSource by mutableStateOf(p.getBoolean("dAuto", true))
+        private set
+    fun updateMaxQuality(v: MaxQuality) { maxQuality = v; p.edit().putString("dMaxQuality", v.name).apply() }
+    fun updateMaxSize(v: MaxSize) { maxSize = v; p.edit().putString("dMaxSize", v.name).apply() }
+    fun updateSpanishFirst(v: Boolean) { spanishFirst = v; p.edit().putBoolean("dSpanish", v).apply() }
+    fun updateHideCam(v: Boolean) { hideCam = v; p.edit().putBoolean("dHideCam", v).apply() }
+    fun updateAutoSource(v: Boolean) { autoSource = v; p.edit().putBoolean("dAuto", v).apply() }
 
     var vodSort by mutableStateOf(load("vodSort", SortBy.NEWEST))
         private set

@@ -205,6 +205,19 @@ fun SettingsScreen(app: VisorApp, nav: Nav) {
                 onClick = { if (app.tmdb.available) s.updateArt(s.artSource.next()) },
             )
         }
+        item { T("Descubrir", Type.small, p.muted, Modifier.padding(start = 12.dp, top = 12.dp, bottom = 4.dp)) }
+        item {
+            val d = app.discover
+            ListRow(
+                "Addons y cuentas debrid",
+                subtitle = "Catálogos y fuentes de la pestaña Descubrir, cuentas Real-Debrid, AllDebrid o Premiumize y preferencias de fuentes",
+                trailing = listOfNotNull(
+                    "${d.addons.count { it.enabled }} addons",
+                    d.accounts.takeIf { it.isNotEmpty() }?.joinToString(", ") { it.kind.short },
+                ).joinToString(" · "),
+                onClick = { nav.push(com.visor.tv.Route.DiscoverSetup) },
+            )
+        }
         item { T("Grabaciones", Type.small, p.muted, Modifier.padding(start = 12.dp, top = 12.dp, bottom = 4.dp)) }
         item {
             ListRow("Guardar en", subtitle = "Pulsa para cambiar entre los almacenamientos detectados", trailing = vol.label, onClick = {

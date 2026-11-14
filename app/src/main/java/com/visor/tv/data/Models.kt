@@ -110,7 +110,7 @@ data class AccountInfo(
 /** Elemento que se puede reproducir. La URL nunca viaja en él: se construye en el momento de reproducir. */
 @Serializable
 data class PlayItem(
-    val kind: String, // live | vod | episode | file
+    val kind: String, // live | vod | episode | file | addon
     val id: Int,
     val ext: String = "",
     val title: String,
@@ -119,8 +119,25 @@ data class PlayItem(
     val epgId: String = "",
     val filePath: String = "",
     val seriesId: Int = 0,
+    // ---- Solo para kind = "addon" (sección Descubrir): los addons usan identificadores de texto ----
+    /** "tipo/id del vídeo", p. ej. "movie/tt0133093" o "series/tt0944947:2:3". */
+    val ref: String = "",
+    /** Ficha a la que pertenece, p. ej. "series/tt0944947". En una película coincide con [ref]. */
+    val parent: String = "",
+    val season: Int = 0,
+    val episode: Int = 0,
 ) {
-    val key: String get() = "$kind:$id"
+    val key: String get() = if (kind == "addon") "addon:$ref" else "$kind:$id"
+
+    /** Serie a la que pertenece un episodio (para "Seguir viendo" y "siguiente episodio"); null si no es un episodio. */
+    val seriesKey: String?
+        get() = when {
+            kind == "episode" && seriesId > 0 -> "s:$seriesId"
+            kind == "addon" && season > 0 && parent.isNotBlank() -> "a:$parent"
+            else -> null
+        }
+
+    val isEpisode: Boolean get() = seriesKey != null
 }
 
 // ---------- Ayudas para leer el JSON irregular de los paneles Xtream ----------

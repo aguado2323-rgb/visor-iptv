@@ -78,6 +78,10 @@ class SecureStore(context: Context) {
 
     fun saveAccount(a: Account?) = put(K_ACCOUNT, a?.let { json.encodeToString(it) })
 
+    /** Otros secretos (addons con clave, cuentas debrid): cifrados igual que la cuenta. */
+    fun saveSecret(name: String, value: String?) = put("x_$name", value)
+    fun loadSecret(name: String): String? = get("x_$name")
+
     fun hasPin(): Boolean = get(K_PIN) != null
 
     fun setPin(pin: String?) {
