@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="docs/banner.png" alt="Visor" width="480">
+<img src="docs/banner.jpg" alt="Visor" width="640">
 
 **A clean, fast IPTV player for Fire TV and Android TV.**
 Live TV with a real guide, movies and series with full detail pages, recordings, and in-app updates, all for your own Xtream Codes subscription.
