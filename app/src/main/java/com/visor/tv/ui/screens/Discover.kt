@@ -85,6 +85,7 @@ import com.visor.tv.Route
 import com.visor.tv.VisorApp
 import com.visor.tv.addons.AddonStream
 import com.visor.tv.addons.CatalogRow
+import com.visor.tv.addons.RowData
 import com.visor.tv.addons.InstalledAddon
 import com.visor.tv.addons.MetaDetail
 import com.visor.tv.addons.MetaPreview
@@ -198,6 +199,16 @@ fun DiscoverScreen(app: VisorApp, nav: Nav) = CompositionLocalProvider(LocalPale
     val rows = remember(d.version, filter) { d.rows(filter.ifBlank { null }) }
     val resume = resumes(app).filter { filter.isBlank() || it.meta.type == filter }
     val mine = app.favorites.of("addon").map { it.toMeta() }.filter { filter.isBlank() || it.type == filter }
+    LaunchedEffect(d.version) { d.prefetch() }
+
+    // La fila con el foco se coloca siempre arriba del todo, justo debajo de la ficha: así nunca queda
+    // media fila cortada encima de la imagen del título elegido.
+    val listState = rememberLazyListState()
+    val scope = rememberCoroutineScope()
+    fun Modifier.snapOnFocus(index: Int): Modifier = onFocusChanged { f ->
+        if (f.hasFocus) scope.launch { listState.animateScrollToItem(index) }
+    }
+    LaunchedEffect(filter) { listState.scrollToItem(0) }
 
     Box(Modifier.fillMaxSize()) {
         DiscoverBackdrop(if (searching) null else focused)
@@ -244,11 +255,12 @@ fun DiscoverScreen(app: VisorApp, nav: Nav) = CompositionLocalProvider(LocalPale
                 if (rows.isEmpty() && resume.isEmpty() && mine.isEmpty()) {
                     Empty("No hay catálogos que mostrar. Añade o activa un addon con catálogos en «Addons y debrid».", Modifier.padding(start = 24.dp))
                 } else LazyColumn(
+                    state = listState,
                     modifier = Modifier.fillMaxSize(),
                     verticalArrangement = Arrangement.spacedBy(14.dp),
                     contentPadding = PaddingValues(top = 6.dp, bottom = 28.dp),
                 ) {
-                    if (resume.isNotEmpty()) item(key = "resume") {
+                    if (resume.isNotEmpty()) item(key = "resume") { Column(Modifier.snapOnFocus(0)) {
                         RowTitle("Seguir viendo")
                         LazyRow(horizontalArrangement = Arrangement.spacedBy(16.dp), contentPadding = PaddingValues(horizontal = 48.dp, vertical = 8.dp)) {
                             items(resume, key = { it.meta.key }) { r ->
@@ -270,19 +282,24 @@ fun DiscoverScreen(app: VisorApp, nav: Nav) = CompositionLocalProvider(LocalPale
                                 )
                             }
                         }
-                    }
+                    } }
                     if (mine.isNotEmpty()) item(key = "mine") {
-                        RowTitle("Mi lista")
-                        MetaRow(app, nav, mine, "disc:fav") { focused = it }
+                        Column(Modifier.snapOnFocus(if (resume.isNotEmpty()) 1 else 0)) {
+                            RowTitle("Mi lista")
+                            MetaRow(app, nav, mine, "disc:fav") { focused = it }
+                        }
                     }
-                    items(rows, key = { it.key }) { row ->
-                        val state = load(row.key, d.version) { d.catalog(row) }
-                        when (state) {
-                            Load.Loading -> { RowTitle(row.title); T("Cargando…", Type.small, MUTED, Modifier.padding(start = 48.dp, top = 8.dp).height(150.dp)) }
-                            is Load.Err -> { RowTitle(row.title); T("${row.addon.manifest.name}: ${state.msg}", Type.small, MUTED, Modifier.padding(start = 48.dp, top = 8.dp, bottom = 8.dp)) }
-                            is Load.Ok -> if (state.value.isNotEmpty()) {
+                    val base = (if (resume.isNotEmpty()) 1 else 0) + (if (mine.isNotEmpty()) 1 else 0)
+                    itemsIndexed(rows, key = { _, r -> r.key }) { i, row ->
+                        LaunchedEffect(row.key, d.version) { d.ensure(row) }
+                        val state = d.rowData[row.key] ?: RowData()
+                        val list = state.items
+                        when {
+                            list == null && state.error == null -> { RowTitle(row.title); T("Cargando…", Type.small, MUTED, Modifier.padding(start = 48.dp, top = 8.dp).height(150.dp)) }
+                            list == null -> { RowTitle(row.title); T("${row.addon.manifest.name}: ${state.error}", Type.small, MUTED, Modifier.padding(start = 48.dp, top = 8.dp, bottom = 8.dp)) }
+                            list.isNotEmpty() -> Column(Modifier.snapOnFocus(base + i)) {
                                 RowTitle(row.title, row.addon.manifest.name)
-                                MetaRow(app, nav, state.value, "disc:${row.key}") { focused = it }
+                                MetaRow(app, nav, list, "disc:${row.key}") { focused = it }
                             }
                         }
                     }

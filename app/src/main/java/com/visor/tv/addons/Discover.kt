@@ -17,7 +17,15 @@ import com.visor.tv.debrid.NotCachedException
 import com.visor.tv.debrid.Premiumize
 import com.visor.tv.debrid.RealDebrid
 import com.visor.tv.debrid.TorrentRequest
+import androidx.compose.runtime.mutableStateMapOf
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Semaphore
+import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
@@ -50,6 +58,11 @@ data class CatalogRow(val addon: InstalledAddon, val catalog: AddonCatalog) {
 /** Fuentes encontradas para un título, ya ordenadas, y qué addons fallaron al pedirlas. */
 data class StreamsResult(val streams: List<StreamInfo>, val failed: List<String>)
 
+/** Estado de una fila de Descubrir: se carga una vez y se queda aunque la fila salga de la pantalla. */
+data class RowData(val items: List<MetaPreview>? = null, val error: String? = null) {
+    val loading: Boolean get() = items == null && error == null
+}
+
 /** Lo que el reproductor necesita para empezar. */
 data class PlaySource(val url: String, val streamId: String, val label: String, val subtitles: List<AddonSubtitle> = emptyList())
 
@@ -69,6 +82,13 @@ class Discover(context: Context, http: OkHttpClient, private val vault: SecureSt
     /** Cambia cuando cambian los addons: las pantallas vuelven a cargar. */
     var version by mutableIntStateOf(0)
         private set
+
+    /** Filas ya pedidas, por [CatalogRow.key]. */
+    val rowData = mutableStateMapOf<String, RowData>()
+    private val rowJobs = HashMap<String, Job>()
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
+    // Unas pocas a la vez y en orden: las primeras filas llegan antes y no se satura un addon lento
+    private val rowGate = Semaphore(4)
 
     private val json = Json { ignoreUnknownKeys = true }
     private val services: Map<DebridKind, DebridService> =
@@ -91,8 +111,36 @@ class Discover(context: Context, http: OkHttpClient, private val vault: SecureSt
     private fun saveAddons() {
         vault.saveSecret(K_ADDONS, json.encodeToString(addons.toList()))
         client.clearCache()
+        rowJobs.values.forEach { it.cancel() }
+        rowJobs.clear()
+        rowData.clear()
         version++
+        prefetch()
     }
+
+    /**
+     * Pide una fila si aún no está pedida (o si falló la última vez). La carga no depende de la pantalla:
+     * si la fila sale de la vista o se cambia de pestaña, sigue y el resultado queda guardado.
+     */
+    fun ensure(row: CatalogRow) {
+        val running = rowJobs[row.key]?.isActive == true
+        if (running || rowData[row.key]?.items != null) return
+        rowData[row.key] = RowData()
+        rowJobs[row.key] = scope.launch {
+            rowGate.withPermit {
+                rowData[row.key] = try {
+                    RowData(items = catalog(row))
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    RowData(error = e.message ?: "no se pudo cargar")
+                }
+            }
+        }
+    }
+
+    /** Empieza a cargar todas las filas, para que Descubrir aparezca ya lleno al abrirlo. */
+    fun prefetch() = rows().forEach { ensure(it) }
 
     /** Instala (o actualiza, si ya estaba) el addon de esa dirección. */
     suspend fun install(input: String): InstalledAddon {

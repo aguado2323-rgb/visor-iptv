@@ -1,5 +1,9 @@
 package com.visor.tv.ui.screens
 
+import androidx.compose.foundation.focusGroup
+import androidx.compose.ui.focus.FocusDirection
+import androidx.compose.ui.focus.focusProperties
+
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -414,6 +418,7 @@ private fun ProgramSearch(app: VisorApp, onPick: (LiveStream, EpgEntry) -> Unit)
 }
 
 @Composable
+@OptIn(androidx.compose.ui.ExperimentalComposeUiApi::class)
 private fun GuideRow(
     app: VisorApp,
     s: LiveStream,
@@ -476,7 +481,19 @@ private fun GuideRow(
             T(s.name, Type.small.copy(fontWeight = FontWeight.SemiBold), Color.White, Modifier.weight(1f))
             if (isPreview) Box(Modifier.size(6.dp).clip(CircleShape).background(Color(0xFFE5484D)))
         }
-        Box(Modifier.width(timelineW).fillMaxHeight()) {
+        // Al llegar a esta fila con ↑ ↓, el foco va a lo que se emite ahora (si está en la ventana visible);
+        // si no, al programa más cercano, como siempre
+        val liveIdx = list.indexOfFirst { it.isNow() }
+        Box(
+            Modifier.width(timelineW).fillMaxHeight()
+                .focusProperties {
+                    enter = { dir ->
+                        if (liveIdx >= 0 && (dir == FocusDirection.Up || dir == FocusDirection.Down)) requesters[liveIdx]
+                        else FocusRequester.Default
+                    }
+                }
+                .focusGroup()
+        ) {
             // Sin guía (o mientras carga) la fila sigue siendo enfocable: se puede bajar por ella y OK pone el canal
             if (list.isEmpty()) {
                 Focusable(

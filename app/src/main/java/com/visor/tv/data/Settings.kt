@@ -5,7 +5,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 
-enum class ThemeMode(val label: String) { LIGHT("Claro"), OLED("Negro OLED") }
+enum class ThemeMode(val label: String) { OLED("Negro OLED"), LIGHT("Claro") }
 enum class Engine(val label: String) { EXO("ExoPlayer"), VLC("VLC") }
 /** Cómo encaja la imagen en la pantalla: entera con bandas, estirada o recortada para llenar. */
 enum class Aspect(val label: String) { FIT("Ajustar"), FILL("Rellenar"), ZOOM("Zoom") }
@@ -31,7 +31,7 @@ class Settings(context: Context) {
     private inline fun <reified T : Enum<T>> load(key: String, def: T): T =
         try { enumValueOf<T>(p.getString(key, def.name)!!) } catch (e: Exception) { def }
 
-    var theme by mutableStateOf(load("theme", ThemeMode.LIGHT))
+    var theme by mutableStateOf(load("theme", ThemeMode.OLED))
         private set
     /** Reproductor para la TV en directo. */
     var engine by mutableStateOf(load("engine", Engine.EXO))
