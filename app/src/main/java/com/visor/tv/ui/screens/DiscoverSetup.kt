@@ -161,7 +161,7 @@ fun DiscoverSetupScreen(app: VisorApp, nav: Nav) {
             item { ListRow("Elegir la fuente", subtitle = "Automática: Visor elige la mejor y, si falla, prueba la siguiente", trailing = if (s.autoSource) "Automática" else "Preguntar siempre", onClick = { s.updateAutoSource(!s.autoSource) }) }
             item { ListRow("Calidad máxima", subtitle = "Útil si la conexión o la tele no dan para 4K", trailing = s.maxQuality.label, onClick = { s.updateMaxQuality(s.maxQuality.next()) }) }
             item { ListRow("Tamaño máximo", subtitle = "Los archivos más grandes necesitan más velocidad", trailing = s.maxSize.label, onClick = { s.updateMaxSize(s.maxSize.next()) }) }
-            item { ListRow("Español primero", subtitle = "Sube las fuentes con audio en castellano o latino", trailing = if (s.spanishFirst) "Sí" else "No", onClick = { s.updateSpanishFirst(!s.spanishFirst) }) }
+            item { ListRow("Español primero", subtitle = "Primero castellano de España, luego español sin especificar y después latino", trailing = if (s.spanishFirst) "Sí" else "No", onClick = { s.updateSpanishFirst(!s.spanishFirst) }) }
             item { ListRow("Ocultar grabaciones de cine", subtitle = "CAM, TS y similares", trailing = if (s.hideCam) "Sí" else "No", onClick = { s.updateHideCam(!s.hideCam) }) }
             if (msg != null) item { T(msg!!, Type.small, p.muted, Modifier.padding(12.dp), maxLines = 3) }
             item {

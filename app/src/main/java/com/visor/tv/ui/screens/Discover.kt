@@ -201,14 +201,12 @@ fun DiscoverScreen(app: VisorApp, nav: Nav) = CompositionLocalProvider(LocalPale
     val mine = app.favorites.of("addon").map { it.toMeta() }.filter { filter.isBlank() || it.type == filter }
     LaunchedEffect(d.version) { d.prefetch() }
 
-    // La fila con el foco se coloca siempre arriba del todo, justo debajo de la ficha: así nunca queda
-    // media fila cortada encima de la imagen del título elegido.
-    val listState = rememberLazyListState()
-    val scope = rememberCoroutineScope()
-    fun Modifier.snapOnFocus(index: Int): Modifier = onFocusChanged { f ->
-        if (f.hasFocus) scope.launch { listState.animateScrollToItem(index) }
-    }
-    LaunchedEffect(filter) { listState.scrollToItem(0) }
+    // Una sola fila a la vista: ↑ ↓ cambian de fila en el mismo sitio, así nunca queda una fila cortada encima
+    // de la imagen. Se recuerda la fila y la posición en ella para volver al mismo póster desde la ficha.
+    var shelfIdx by rememberSaveable { mutableIntStateOf(0) }
+    var col by rememberSaveable { mutableIntStateOf(0) }
+    var wantFocus by remember { mutableStateOf(false) }
+    LaunchedEffect(filter) { shelfIdx = 0; col = 0 }
 
     Box(Modifier.fillMaxSize()) {
         DiscoverBackdrop(if (searching) null else focused)
@@ -237,7 +235,14 @@ fun DiscoverScreen(app: VisorApp, nav: Nav) = CompositionLocalProvider(LocalPale
                     if (f != null) {
                         TitleArt(f.name, f.logoUrl(), logoHeight = 52.dp, style = BIG_TITLE.copy(fontSize = 28.sp, lineHeight = 32.sp))
                         T(f.line(), META.copy(fontSize = 12.sp), Color(0xFFD6D6D0), Modifier.padding(top = 6.dp))
-                        if (f.description.isNotBlank()) T(f.description, Type.body.copy(fontSize = 12.5.sp, lineHeight = 18.sp), Color(0xFFE0E0DC), Modifier.padding(top = 6.dp), maxLines = 2)
+                        // Sinopsis en castellano de TMDB; la del addon (normalmente en inglés) solo si TMDB no la tiene
+                        val plot by produceState<String?>(null, f.key) {
+                            value = if (app.tmdb.available && f.id.startsWith("tt")) {
+                                delay(250) // al recorrer la fila deprisa no se pide la de cada título
+                                app.tmdb.briefByImdb(f.id.substringBefore(':'), f.isSeries)?.overview?.ifBlank { null } ?: f.description
+                            } else f.description
+                        }
+                        plot?.takeIf { it.isNotBlank() }?.let { T(it, Type.body.copy(fontSize = 12.5.sp, lineHeight = 18.sp), Color(0xFFE0E0DC), Modifier.padding(top = 6.dp), maxLines = 2) }
                     } else {
                         T("DESCUBRIR", EYEBROW, Color(0xFFC9C9C4))
                         T("Películas y series de tus addons", BIG_TITLE.copy(fontSize = 28.sp, lineHeight = 32.sp), Color.White, Modifier.padding(top = 4.dp))
@@ -252,59 +257,106 @@ fun DiscoverScreen(app: VisorApp, nav: Nav) = CompositionLocalProvider(LocalPale
                     T("Sin addon de fuentes todavía: se ven las fichas, pero no se puede reproducir. Añádelo en «Addons y debrid».", Type.small, MUTED, Modifier.padding(start = 48.dp, bottom = 4.dp))
                 }
 
-                if (rows.isEmpty() && resume.isEmpty() && mine.isEmpty()) {
-                    Empty("No hay catálogos que mostrar. Añade o activa un addon con catálogos en «Addons y debrid».", Modifier.padding(start = 24.dp))
-                } else LazyColumn(
-                    state = listState,
-                    modifier = Modifier.fillMaxSize(),
-                    verticalArrangement = Arrangement.spacedBy(14.dp),
-                    contentPadding = PaddingValues(top = 6.dp, bottom = 28.dp),
-                ) {
-                    if (resume.isNotEmpty()) item(key = "resume") { Column(Modifier.snapOnFocus(0)) {
-                        RowTitle("Seguir viendo")
-                        LazyRow(horizontalArrangement = Arrangement.spacedBy(16.dp), contentPadding = PaddingValues(horizontal = 48.dp, vertical = 8.dp)) {
-                            items(resume, key = { it.meta.key }) { r ->
-                                val k = "disc:cw:${r.meta.key}"
-                                var menu by remember { mutableStateOf(false) }
-                                Poster(
-                                    url = r.meta.poster, title = r.meta.name, subtitle = r.note, width = 108.dp,
-                                    progress = r.frac.takeIf { it > 0f },
-                                    onClick = { nav.open(Route.Addon(r.meta), k) },
-                                    onMenu = { menu = true },
-                                    onFocused = { focused = r.meta },
-                                    focusRequester = rememberReturnFocus(nav, k),
-                                )
-                                if (menu) ActionsDialog(
-                                    r.meta.name,
-                                    listOf("Ver ficha" to { nav.open(Route.Addon(r.meta), k) }, "Quitar de Seguir viendo" to { app.progress.remove(r.item) }),
-                                    onDismiss = { menu = false },
-                                    subtitle = r.note,
-                                )
-                            }
-                        }
-                    } }
-                    if (mine.isNotEmpty()) item(key = "mine") {
-                        Column(Modifier.snapOnFocus(if (resume.isNotEmpty()) 1 else 0)) {
-                            RowTitle("Mi lista")
-                            MetaRow(app, nav, mine, "disc:fav") { focused = it }
-                        }
+                val shelves = buildList {
+                    if (resume.isNotEmpty()) add(Shelf("resume", "Seguir viendo", resume = resume))
+                    if (mine.isNotEmpty()) add(Shelf("mine", "Mi lista", items = mine))
+                    rows.forEach { r ->
+                        val st = d.rowData[r.key] ?: RowData()
+                        // Una fila que ha llegado vacía no se enseña
+                        if (st.items?.isEmpty() != true) add(Shelf(r.key, r.title, r.addon.manifest.name, st.items, st.error?.let { "${r.addon.manifest.name}: $it" }, row = r))
                     }
-                    val base = (if (resume.isNotEmpty()) 1 else 0) + (if (mine.isNotEmpty()) 1 else 0)
-                    itemsIndexed(rows, key = { _, r -> r.key }) { i, row ->
-                        LaunchedEffect(row.key, d.version) { d.ensure(row) }
-                        val state = d.rowData[row.key] ?: RowData()
-                        val list = state.items
-                        when {
-                            list == null && state.error == null -> { RowTitle(row.title); T("Cargando…", Type.small, MUTED, Modifier.padding(start = 48.dp, top = 8.dp).height(150.dp)) }
-                            list == null -> { RowTitle(row.title); T("${row.addon.manifest.name}: ${state.error}", Type.small, MUTED, Modifier.padding(start = 48.dp, top = 8.dp, bottom = 8.dp)) }
-                            list.isNotEmpty() -> Column(Modifier.snapOnFocus(base + i)) {
-                                RowTitle(row.title, row.addon.manifest.name)
-                                MetaRow(app, nav, list, "disc:${row.key}") { focused = it }
+                }
+                if (shelves.isEmpty()) {
+                    Empty("No hay catálogos que mostrar. Añade o activa un addon con catálogos en «Addons y debrid».", Modifier.padding(start = 24.dp))
+                } else {
+                    val idx = shelfIdx.coerceIn(0, shelves.lastIndex)
+                    val shelf = shelves[idx]
+                    shelf.row?.let { r -> LaunchedEffect(r.key, d.version) { d.ensure(r) } }
+                    // La siguiente fila se pide ya, para que al bajar esté lista
+                    shelves.getOrNull(idx + 1)?.row?.let { r -> LaunchedEffect(r.key, d.version) { d.ensure(r) } }
+                    val entry = remember(shelf.key) { FocusRequester() }
+                    // Si se espera en "Cargando…" y llega la fila, el foco pasa a su primer póster
+                    var waiting by remember(shelf.key) { mutableStateOf(false) }
+                    LaunchedEffect(shelf.items != null) { if (shelf.items != null && waiting) { waiting = false; wantFocus = true } }
+                    LaunchedEffect(shelf.key, wantFocus, shelf.items != null) {
+                        if (!wantFocus) return@LaunchedEffect
+                        delay(40)
+                        try { entry.requestFocus(); wantFocus = false } catch (_: Exception) { }
+                    }
+                    Column(
+                        Modifier
+                            .fillMaxWidth()
+                            .padding(top = 8.dp)
+                            .onFocusChanged { f -> if (!f.hasFocus && d.rowData[shelf.key]?.items == null) waiting = false }
+                            .onPreviewKeyEvent { e ->
+                                if (e.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
+                                when (e.key) {
+                                    Key.DirectionDown -> { if (idx < shelves.lastIndex) { shelfIdx = idx + 1; col = 0; wantFocus = true }; true }
+                                    Key.DirectionUp -> if (idx > 0) { shelfIdx = idx - 1; col = 0; wantFocus = true; true } else false
+                                    else -> false
+                                }
+                            },
+                    ) {
+                        Row(Modifier.fillMaxWidth().padding(horizontal = 48.dp), verticalAlignment = Alignment.CenterVertically) {
+                            T(shelf.title, SECTION, Color.White, Modifier.weight(1f))
+                            if (shelf.source != null) T(shelf.source + "   ", Type.small, MUTED)
+                            T("${idx + 1} / ${shelves.size}", Type.small, MUTED)
+                        }
+                        androidx.compose.runtime.key(shelf.key) {
+                            when {
+                                shelf.resume != null -> ResumeRow(app, nav, shelf.resume, col, entry, onCol = { col = it }) { focused = it }
+                                shelf.items != null -> MetaRow(app, nav, shelf.items, "disc:${shelf.key}", col, entry, onCol = { col = it }) { focused = it }
+                                // Mientras carga (o si falla) la fila sigue siendo enfocable, para poder seguir bajando
+                                else -> Focusable(onClick = { shelf.row?.let { d.ensure(it) } }, onFocused = { waiting = true }, focusRequester = entry, shape = RoundedCornerShape(12.dp), modifier = Modifier.padding(start = 48.dp, top = 8.dp)) { f ->
+                                    Box(Modifier.width(360.dp).height(162.dp).background(if (f) Color.White.copy(alpha = 0.16f) else Color.White.copy(alpha = 0.06f)).padding(16.dp)) {
+                                        T(shelf.error ?: "Cargando…", Type.small, Color(0xFFD6D6D0), maxLines = 3)
+                                    }
+                                }
                             }
                         }
+                        val next = shelves.getOrNull(idx + 1)
+                        T(if (next != null) "↓  ${next.title}" else " ", Type.small, MUTED, Modifier.padding(start = 48.dp, top = 2.dp))
                     }
                 }
             }
+        }
+    }
+}
+
+/** Una fila de Descubrir: Seguir viendo, Mi lista o un catálogo de un addon. */
+private class Shelf(
+    val key: String,
+    val title: String,
+    val source: String? = null,
+    val items: List<MetaPreview>? = null,
+    val error: String? = null,
+    val row: CatalogRow? = null,
+    val resume: List<Resume>? = null,
+)
+
+@Composable
+private fun ResumeRow(app: VisorApp, nav: Nav, resume: List<Resume>, start: Int, entry: FocusRequester, onCol: (Int) -> Unit, onFocus: (MetaPreview) -> Unit) {
+    val first = start.coerceIn(0, (resume.size - 1).coerceAtLeast(0))
+    val state = rememberLazyListState(initialFirstVisibleItemIndex = first)
+    LazyRow(state = state, horizontalArrangement = Arrangement.spacedBy(16.dp), contentPadding = PaddingValues(horizontal = 48.dp, vertical = 8.dp)) {
+        itemsIndexed(resume, key = { _, r -> r.meta.key }) { i, r ->
+            val k = "disc:cw:${r.meta.key}"
+            var menu by remember { mutableStateOf(false) }
+            val back = rememberReturnFocus(nav, k)
+            Poster(
+                url = r.meta.poster, title = r.meta.name, subtitle = r.note, width = 108.dp,
+                progress = r.frac.takeIf { it > 0f },
+                onClick = { nav.open(Route.Addon(r.meta), k) },
+                onMenu = { menu = true },
+                onFocused = { onCol(i); onFocus(r.meta) },
+                focusRequester = if (nav.returnKey == k) back else if (i == first) entry else back,
+            )
+            if (menu) ActionsDialog(
+                r.meta.name,
+                listOf("Ver ficha" to { nav.open(Route.Addon(r.meta), k) }, "Quitar de Seguir viendo" to { app.progress.remove(r.item) }),
+                onDismiss = { menu = false },
+                subtitle = r.note,
+            )
         }
     }
 }
@@ -319,17 +371,23 @@ private fun RowTitle(title: String, source: String? = null) {
 
 /** Fila de carátulas de Descubrir. OK abre la ficha; ≡ añade o quita de Mi lista. */
 @Composable
-private fun MetaRow(app: VisorApp, nav: Nav, list: List<MetaPreview>, prefix: String, onFocus: (MetaPreview) -> Unit) {
-    LazyRow(horizontalArrangement = Arrangement.spacedBy(16.dp), contentPadding = PaddingValues(horizontal = 48.dp, vertical = 8.dp)) {
-        items(list, key = { it.key }) { m ->
+private fun MetaRow(
+    app: VisorApp, nav: Nav, list: List<MetaPreview>, prefix: String,
+    start: Int, entry: FocusRequester, onCol: (Int) -> Unit, onFocus: (MetaPreview) -> Unit,
+) {
+    val first = start.coerceIn(0, (list.size - 1).coerceAtLeast(0))
+    val state = rememberLazyListState(initialFirstVisibleItemIndex = first)
+    LazyRow(state = state, horizontalArrangement = Arrangement.spacedBy(16.dp), contentPadding = PaddingValues(horizontal = 48.dp, vertical = 8.dp)) {
+        itemsIndexed(list, key = { _, m -> m.key }) { i, m ->
             val k = "$prefix:${m.key}"
+            val back = rememberReturnFocus(nav, k)
             Poster(
                 url = m.poster, title = m.name, width = 108.dp,
                 subtitle = listOfNotNull(if (app.favorites.containsRef(m.key)) "★" else null, m.year.ifBlank { null }, m.rating.ifBlank { null }?.let { "★ $it" }).joinToString("  ").ifBlank { null },
                 onClick = { nav.open(Route.Addon(m), k) },
                 onMenu = { app.favorites.toggle(m.toFav()) },
-                onFocused = { onFocus(m) },
-                focusRequester = rememberReturnFocus(nav, k),
+                onFocused = { onCol(i); onFocus(m) },
+                focusRequester = if (nav.returnKey == k) back else if (i == first) entry else back,
             )
         }
     }

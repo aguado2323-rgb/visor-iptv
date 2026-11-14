@@ -11,6 +11,9 @@ import okhttp3.Request
 import java.util.concurrent.ConcurrentHashMap
 
 /** Lo que TMDB sabe de una película o serie, para completar (o sustituir) los datos del proveedor. */
+/** Lo básico de un título de TMDB, en castellano. */
+data class TmdbBrief(val id: String, val title: String, val overview: String)
+
 data class TmdbInfo(
     val id: String,
     /** Título en español. */
@@ -91,15 +94,19 @@ class Tmdb(private val http: OkHttpClient) {
     }
 
     /** Id de TMDB a partir del de IMDb ("tt0133093"), que es el que usan los addons de Descubrir. */
-    suspend fun idByImdb(imdb: String, isTv: Boolean): String? {
+    suspend fun idByImdb(imdb: String, isTv: Boolean): String? = briefByImdb(imdb, isTv)?.id
+
+    /** Id, título y sinopsis en castellano a partir del id de IMDb, con una sola petición (y guardado en caché). */
+    suspend fun briefByImdb(imdb: String, isTv: Boolean): TmdbBrief? {
         if (!available || !imdb.startsWith("tt")) return null
         val key = "imdb:$imdb:$isTv"
-        (cache[key] as? String)?.let { return it }
+        (cache[key] as? TmdbBrief)?.let { return it }
         if (key in misses) return null
         val o = get(url("find/$imdb", "external_source" to "imdb_id")) ?: return null
-        val id = o[if (isTv) "tv_results" else "movie_results"].asArr().firstOrNull()?.asObj()?.s("id")?.takeIf { it.isNotBlank() }
-        if (id == null) misses += key else cache[key] = id
-        return id
+        val r = o[if (isTv) "tv_results" else "movie_results"].asArr().firstOrNull()?.asObj()
+        val id = r?.s("id")?.takeIf { it.isNotBlank() }
+        if (r == null || id == null) { misses += key; return null }
+        return TmdbBrief(id, r.s(if (isTv) "name" else "title"), r.s("overview")).also { cache[key] = it }
     }
 
     suspend fun movie(providerId: String?, name: String, year: Int): TmdbInfo? {
