@@ -9,15 +9,17 @@ import java.io.File
 
 @Serializable
 data class FavItem(
-    val type: String, // live | vod | series
+    val type: String, // live | vod | series | addon
     val id: Int,
     val name: String,
     val icon: String = "",
     val ext: String = "",
     val epgId: String = "",
     val num: Int = 0,
+    /** Solo type = "addon" (sección Descubrir): "tipo/id", p. ej. "series/tt0944947". */
+    val ref: String = "",
 ) {
-    val key get() = "$type:$id"
+    val key get() = if (ref.isNotBlank()) "$type:$ref" else "$type:$id"
 }
 
 /** Favoritos de canales, películas y series, guardados en el propio dispositivo. */
@@ -34,6 +36,8 @@ class Favorites(context: Context) {
 
     fun of(type: String): List<FavItem> = items.filter { it.type == type }
     fun contains(type: String, id: Int) = items.any { it.type == type && it.id == id }
+    /** Títulos de Descubrir, que se identifican por texto. */
+    fun containsRef(ref: String) = items.any { it.type == "addon" && it.ref == ref }
 
     fun toggle(item: FavItem): Boolean {
         val existing = items.indexOfFirst { it.key == item.key }
@@ -78,7 +82,8 @@ class Progress(context: Context) {
 
     /** Quita algo de "Seguir viendo". En una serie quita todos sus episodios. */
     fun remove(item: PlayItem) {
-        if (item.kind == "episode" && item.seriesId > 0) entries.removeAll { it.item.kind == "episode" && it.item.seriesId == item.seriesId }
+        val series = item.seriesKey
+        if (series != null) entries.removeAll { it.item.seriesKey == series }
         else entries.removeAll { it.item.key == item.key }
         save()
     }
@@ -99,8 +104,9 @@ class Progress(context: Context) {
         // recuerda el episodio terminado (solo el último) para proponer el siguiente.
         if (pos > 30_000 && pos < dur * 0.95) {
             entries.add(0, ProgressEntry(item, pos, dur, System.currentTimeMillis()))
-        } else if (pos >= dur * 0.95 && item.kind == "episode" && item.seriesId > 0) {
-            entries.removeAll { it.done && it.item.seriesId == item.seriesId }
+        } else if (pos >= dur * 0.95 && item.isEpisode) {
+            val series = item.seriesKey
+            entries.removeAll { it.done && it.item.seriesKey == series }
             entries.add(0, ProgressEntry(item, dur, dur, System.currentTimeMillis(), done = true))
         }
         while (entries.size > 60) entries.removeAt(entries.lastIndex)

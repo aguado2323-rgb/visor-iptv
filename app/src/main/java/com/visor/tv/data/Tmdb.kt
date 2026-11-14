@@ -13,6 +13,8 @@ import java.util.concurrent.ConcurrentHashMap
 /** Lo que TMDB sabe de una película o serie, para completar (o sustituir) los datos del proveedor. */
 data class TmdbInfo(
     val id: String,
+    /** Título en español. */
+    val title: String = "",
     val poster: String = "",
     val backdrop: String = "",
     /** Logotipo del título (PNG transparente), en español o inglés. */
@@ -88,6 +90,18 @@ class Tmdb(private val http: OkHttpClient) {
         return id
     }
 
+    /** Id de TMDB a partir del de IMDb ("tt0133093"), que es el que usan los addons de Descubrir. */
+    suspend fun idByImdb(imdb: String, isTv: Boolean): String? {
+        if (!available || !imdb.startsWith("tt")) return null
+        val key = "imdb:$imdb:$isTv"
+        (cache[key] as? String)?.let { return it }
+        if (key in misses) return null
+        val o = get(url("find/$imdb", "external_source" to "imdb_id")) ?: return null
+        val id = o[if (isTv) "tv_results" else "movie_results"].asArr().firstOrNull()?.asObj()?.s("id")?.takeIf { it.isNotBlank() }
+        if (id == null) misses += key else cache[key] = id
+        return id
+    }
+
     suspend fun movie(providerId: String?, name: String, year: Int): TmdbInfo? {
         if (!available) return null
         val id = resolve(providerId, name, year, isTv = false) ?: return null
@@ -101,6 +115,7 @@ class Tmdb(private val http: OkHttpClient) {
         }.orEmpty()
         return TmdbInfo(
             id = id,
+            title = o.s("title").ifBlank { o.s("name") },
             poster = img("w500", o.s("poster_path")),
             backdrop = img("w1280", o.s("backdrop_path")),
             logo = logoOf(o),
@@ -130,6 +145,7 @@ class Tmdb(private val http: OkHttpClient) {
         }.orEmpty()
         return TmdbInfo(
             id = id,
+            title = o.s("title").ifBlank { o.s("name") },
             poster = img("w500", o.s("poster_path")),
             backdrop = img("w1280", o.s("backdrop_path")),
             logo = logoOf(o),

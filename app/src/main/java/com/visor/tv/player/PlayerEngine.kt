@@ -6,12 +6,16 @@ import com.visor.tv.data.PlayItem
 
 data class Track(val id: String, val label: String, val selected: Boolean)
 
+/** Subtítulo que no viene dentro del vídeo: una dirección con un archivo SRT o VTT. */
+data class ExternalSub(val url: String, val lang: String, val label: String)
+
 /** Capa común para ExoPlayer y VLC: la interfaz del reproductor no sabe cuál está debajo. */
 interface PlayerEngine {
     var onError: ((String) -> Unit)?
     var onEnded: (() -> Unit)?
 
-    fun prepare(url: String, startMs: Long, isLive: Boolean)
+    /** [subs]: subtítulos externos (de addons) que se añaden a los que traiga el propio vídeo. */
+    fun prepare(url: String, startMs: Long, isLive: Boolean, subs: List<ExternalSub> = emptyList())
     fun togglePause()
     fun isPlaying(): Boolean
     fun seekBy(ms: Long)

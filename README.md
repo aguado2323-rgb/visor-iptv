@@ -48,6 +48,15 @@ Most IPTV apps on Fire TV are cluttered and slow. Visor focuses on what you use 
 - **Back returns to the same poster**, so you keep browsing where you were.
 - Artwork from your provider by default, or TMDB.
 
+### Discover (Stremio-compatible addons + debrid)
+- A separate **Discover** tab for movies and series that come from **Stremio/Nuvio-compatible addons** instead of your IPTV provider. Cinemeta (catalogs and detail pages only, no sources) is included; you add the source addons you already use.
+- Rows per addon catalog, search across every addon, **Continue watching** and **My list**, and detail pages with seasons, episodes and trailer.
+- **Debrid accounts:** Real-Debrid and AllDebrid connect with an on-screen code (no typing), Premiumize with its API key. Only torrents that are already **cached** in your debrid are played; nothing is left downloading in your account.
+- **Best source, automatically:** sources are ranked by your preferences (max quality, max size, Spanish audio first, hide CAM) and, if one fails, the player tries the next. **☰ Sources** lists them all if you prefer to pick.
+- **Add from your phone:** a small page served by the TV on your home network lets you paste an addon URL or a debrid key instead of typing it with the remote. It only runs while the dialog is open and asks for a 6-digit code shown on the TV.
+- External subtitles from addons, in both ExoPlayer and VLC.
+- Visor doesn't bundle or recommend any source addon: what you install, and whether it's legal where you live, is up to you.
+
 ### Player
 - **ExoPlayer or VLC,** chosen separately for live TV and for movies, series and recordings. You can also switch on the fly if a stream misbehaves.
 - **Audio and subtitles panel** with every track the stream carries.
@@ -92,6 +101,7 @@ Your subscription details stay on your TV.
 - **System certificates only:** a proxy or a user-installed certificate can't read HTTPS traffic.
 - **No URLs on disk or in logs:** stream URLs that contain credentials are built in memory at play time.
 - **Optional PIN** for Settings or for the whole app.
+- **Addons and debrid:** addon URLs (which often carry your keys) and debrid tokens are stored in the same encrypted vault, are never written to logs or error messages and are not part of the backup file.
 
 **Limits:** if your provider redirects streams to plain `http://`, that part isn't encrypted. Anyone with ADB access to the TV while the app is open could inspect its memory, so turn ADB off when you don't need it.
 

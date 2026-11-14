@@ -1,5 +1,7 @@
 package com.visor.tv
 
+import androidx.compose.foundation.focusGroup
+import androidx.compose.foundation.horizontalScroll
 import android.content.Context
 import android.content.Intent
 import android.os.Bundle
@@ -74,7 +76,7 @@ import java.util.Date
 import java.util.Locale
 
 enum class Tab(val label: String) {
-    HOME("Inicio"), LIVE("TV"), GUIDE("Guía"), MOVIES("Películas"), SERIES("Series"),
+    HOME("Inicio"), DISCOVER("Descubrir"), GUIDE("Guía"), LIVE("TV"), MOVIES("Películas"), SERIES("Series"),
     FAVS("Favoritos"), REC("Grabaciones"), SETTINGS("Ajustes")
 }
 
@@ -82,6 +84,10 @@ sealed interface Route {
     data object Tabs : Route
     data class Movie(val vod: VodStream) : Route
     data class Show(val series: SeriesItem) : Route
+    /** Ficha de un título de Descubrir (addons). */
+    data class Addon(val meta: com.visor.tv.addons.MetaPreview) : Route
+    /** Addons, cuentas debrid y preferencias de fuentes. */
+    data object DiscoverSetup : Route
 }
 
 /** Navegación mínima: una pila de pantallas y la pestaña activa. */
@@ -156,6 +162,13 @@ private fun Root(app: VisorApp, onExit: () -> Unit) {
         }
     }
 
+    // Descubrir: los catálogos de los addons se empiezan a pedir al abrir la app, para que la pestaña salga ya llena
+    LaunchedEffect(app.repo.account) {
+        if (app.repo.account == null) return@LaunchedEffect
+        delay(2_000)
+        app.discover.prefetch()
+    }
+
     // Guía completa (XMLTV): se descarga al abrir la app si tiene más de 12 horas, y luego cada hora se comprueba
     LaunchedEffect(app.repo.account) {
         if (app.repo.account == null) return@LaunchedEffect
@@ -194,6 +207,8 @@ private fun Root(app: VisorApp, onExit: () -> Unit) {
                     // key: cada ficha empieza de cero aunque se abra una desde otra
                     is Route.Movie -> androidx.compose.runtime.key(r, nav.stack.size) { MovieDetail(app, nav, r.vod) }
                     is Route.Show -> androidx.compose.runtime.key(r, nav.stack.size) { SeriesDetail(app, r.series) }
+                    is Route.Addon -> androidx.compose.runtime.key(r, nav.stack.size) { com.visor.tv.ui.screens.AddonDetail(app, nav, r.meta) }
+                    Route.DiscoverSetup -> com.visor.tv.ui.screens.DiscoverSetupScreen(app, nav)
                 }
                 if (app.updater.prompt) UpdateDialog(app)
                 MiniPlayerWindow(Modifier.align(Alignment.BottomEnd).padding(24.dp))
@@ -228,11 +243,10 @@ private fun TabsScaffold(app: VisorApp, nav: Nav) {
     // Inicio va a pantalla completa con el menú encima (fino y siempre oscuro); el resto, debajo de la cabecera.
     val home = nav.tab == Tab.HOME
     val guide = nav.tab == Tab.GUIDE
-    // Inicio y Guía: menú fino sobre fondo oscuro
-    val slim = home || guide
+    val discover = nav.tab == Tab.DISCOVER
+    // Inicio, Guía y Descubrir: menú fino sobre fondo oscuro
+    val slim = home || guide || discover
     val homeFocus = remember { com.visor.tv.ui.screens.HomeFocus(firstTab) }
-    val density = androidx.compose.ui.platform.LocalDensity.current
-    var headerH by remember { mutableStateOf(130.dp) }
 
     Box(Modifier.fillMaxSize()) {
         Box(
@@ -240,85 +254,68 @@ private fun TabsScaffold(app: VisorApp, nav: Nav) {
                 .fillMaxSize()
                 .then(
                     when {
-                        home -> Modifier
-                        // La guía usa el menú fino (como Inicio) para dejar sitio a la ventana y la parrilla
-                        guide -> Modifier.padding(top = 56.dp)
-                        else -> Modifier.padding(start = 40.dp, end = 40.dp, top = headerH)
+                        // Inicio y Descubrir van a pantalla completa, con el menú encima de la imagen
+                        home || discover -> Modifier
+                        guide -> Modifier.padding(top = HEADER_H)
+                        else -> Modifier.padding(start = 44.dp, end = 44.dp, top = HEADER_H)
                     }
                 )
         ) {
-            when (nav.tab) {
-                Tab.HOME -> HomeScreen(app, nav, homeFocus)
-                Tab.LIVE -> LiveScreen(app)
-                Tab.GUIDE -> GuideScreen(app)
-                Tab.MOVIES -> MoviesScreen(app, nav)
-                Tab.SERIES -> SeriesScreen(app, nav)
-                Tab.FAVS -> FavoritesScreen(app, nav)
-                Tab.REC -> RecordingsScreen(app)
-                Tab.SETTINGS -> SettingsScreen(app, nav)
-            }
+            // Pantallas normales: título grande bajo el menú, como en la Guía, y el contenido debajo
+            if (!slim) Column(Modifier.fillMaxSize()) {
+                T(nav.tab.label, Type.title.copy(fontSize = 26.sp, lineHeight = 30.sp, fontWeight = androidx.compose.ui.text.font.FontWeight.ExtraBold, letterSpacing = (-0.5).sp), p.text, Modifier.padding(top = 6.dp))
+                T(tabHint(nav.tab), Type.small.copy(fontSize = 12.sp), p.muted, Modifier.padding(top = 4.dp, bottom = 16.dp))
+                Box(Modifier.weight(1f).fillMaxWidth()) { TabContent(app, nav, homeFocus) }
+            } else TabContent(app, nav, homeFocus)
         }
 
+        // El menú es siempre el mismo, en el mismo sitio y con el mismo tamaño: al cambiar de pestaña solo cambia
+        // lo de debajo. En las pantallas oscuras (Inicio, Guía, Descubrir) usa los colores del tema oscuro.
         androidx.compose.runtime.CompositionLocalProvider(LocalPalette provides if (slim) com.visor.tv.ui.OledPalette else p) {
             val hp = LocalPalette.current
             Row(
                 Modifier
                     .fillMaxWidth()
-                    .onSizeChanged { if (!slim) headerH = with(density) { it.height.toDp() } + 18.dp }
-                    .padding(start = if (slim) 44.dp else 40.dp, end = if (slim) 48.dp else 40.dp, top = if (slim) 20.dp else 28.dp),
+                    .height(HEADER_H)
+                    .padding(start = 44.dp, end = 48.dp, top = 20.dp),
                 verticalAlignment = Alignment.Top,
             ) {
-                Column(Modifier.weight(1f)) {
-                    if (!slim) {
-                        T(nav.tab.label, Type.title)
-                        Spacer(Modifier.height(10.dp))
-                    }
-                    LazyRow(
-                        horizontalArrangement = Arrangement.spacedBy(if (slim) 4.dp else 6.dp),
-                        modifier = Modifier
-                            .onFocusChanged { tabsFocused = it.hasFocus }
-                            // En Inicio, ↓ desde el menú va primero a los puntos de las novedades
-                            .onPreviewKeyEvent { e ->
-                                if (home && homeFocus.dotsReady && e.type == KeyEventType.KeyDown && e.key == Key.DirectionDown) {
-                                    try { homeFocus.dots.requestFocus() } catch (_: Exception) { }
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                    modifier = Modifier
+                        .weight(1f)
+                        // Solo se desplaza si no cabe (por ejemplo, con la ventana de un canal abierta)
+                        .horizontalScroll(androidx.compose.foundation.rememberScrollState())
+                        .onFocusChanged { tabsFocused = it.hasFocus }
+                        // Al subir desde el contenido se vuelve a la pestaña en la que estás, no a la más cercana
+                        .focusProperties { enter = { firstTab } }
+                        .focusGroup(),
+                ) {
+                    Tab.entries.forEach { t ->
+                        val active = t == nav.tab
+                        Focusable(
+                            onClick = { nav.tab = t },
+                            onFocused = { nav.tab = t },
+                            focusRequester = if (active) firstTab else null,
+                            // En Inicio, ↓ desde el menú va primero a los puntos de las novedades (← → las cambian)
+                            modifier = Modifier.onPreviewKeyEvent { e ->
+                                if (e.key != Key.DirectionDown || nav.tab != Tab.HOME || !homeFocus.dotsReady) false
+                                else {
+                                    if (e.type == KeyEventType.KeyDown) try { homeFocus.dots.requestFocus() } catch (_: Exception) { }
                                     true
-                                } else false
-                            }
-                            // Al subir desde el contenido se vuelve a la pestaña en la que estás, no a la más cercana
-                            .focusProperties { enter = { firstTab } },
-                    ) {
-                        itemsIndexed(Tab.entries.toList()) { i, t ->
-                            val active = t == nav.tab
-                            Focusable(
-                                onClick = { nav.tab = t },
-                                onFocused = { nav.tab = t },
-                                focusRequester = if (i == nav.tab.ordinal) firstTab else null,
-                                shape = androidx.compose.foundation.shape.RoundedCornerShape(if (slim) 50 else 20),
-                            ) { focused ->
-                                if (slim) {
-                                    // Menú fino sobre la imagen: píldora para la pestaña activa
-                                    Box(
-                                        Modifier
-                                            .background(if (focused) Color.White else if (active) Color.White.copy(alpha = 0.16f) else Color.Transparent)
-                                            .padding(horizontal = 12.dp, vertical = 5.dp)
-                                    ) {
-                                        T(
-                                            t.label, Type.tab.copy(fontSize = 13.sp),
-                                            if (focused) Color.Black else if (active) Color.White else Color.White.copy(alpha = 0.72f),
-                                        )
-                                    }
-                                } else {
-                                    Column(
-                                        Modifier
-                                            .background(if (focused) hp.focusBg else Color.Transparent)
-                                            .padding(horizontal = 12.dp, vertical = 6.dp),
-                                        horizontalAlignment = Alignment.CenterHorizontally,
-                                    ) {
-                                        T(t.label, Type.tab, if (focused) hp.focusText else if (active) hp.text else hp.muted)
-                                        Spacer(Modifier.height(3.dp))
-                                        Box(Modifier.width(18.dp).height(2.dp).background(if (active && !focused) hp.text else Color.Transparent))
-                                    }
                                 }
+                            },
+                            shape = androidx.compose.foundation.shape.RoundedCornerShape(50),
+                        ) { focused ->
+                            Box(
+                                Modifier
+                                    .background(if (focused) hp.focusBg else if (active) hp.text.copy(alpha = 0.14f) else Color.Transparent)
+                                    .padding(horizontal = 12.dp, vertical = 5.dp)
+                            ) {
+                                T(
+                                    t.label, Type.tab.copy(fontSize = 13.sp),
+                                    if (focused) hp.focusText else if (active) hp.text else hp.text.copy(alpha = 0.72f),
+                                )
                             }
                         }
                     }
@@ -329,11 +326,40 @@ private fun TabsScaffold(app: VisorApp, nav: Nav) {
                         TvButton("⛶ ${mini.title}", onClick = { MiniPlayer.expand(ctx) })
                         TvButton("✕", onClick = { MiniPlayer.stop() })
                     }
-                    T(now, if (slim) Type.label.copy(fontSize = 14.sp) else Type.h2, if (slim) Color.White else hp.text)
+                    T(now, Type.label.copy(fontSize = 14.sp), hp.text)
                 }
             }
         }
     }
 }
+
+@Composable
+private fun TabContent(app: VisorApp, nav: Nav, homeFocus: com.visor.tv.ui.screens.HomeFocus) {
+    when (nav.tab) {
+        Tab.HOME -> HomeScreen(app, nav, homeFocus)
+        Tab.LIVE -> LiveScreen(app)
+        Tab.GUIDE -> GuideScreen(app)
+        Tab.MOVIES -> MoviesScreen(app, nav)
+        Tab.SERIES -> SeriesScreen(app, nav)
+        Tab.DISCOVER -> com.visor.tv.ui.screens.DiscoverScreen(app, nav)
+        Tab.FAVS -> FavoritesScreen(app, nav)
+        Tab.REC -> RecordingsScreen(app)
+        Tab.SETTINGS -> SettingsScreen(app, nav)
+    }
+}
+
+/** Frase bajo el título de cada pestaña. */
+private fun tabHint(t: Tab): String = when (t) {
+    Tab.LIVE -> "Los canales de tu lista, por carpetas, con lo que se emite ahora"
+    Tab.MOVIES -> "Las películas de tu proveedor. ≡ sobre una carátula la añade a favoritos"
+    Tab.SERIES -> "Las series de tu proveedor. ≡ sobre una carátula la añade a favoritos"
+    Tab.FAVS -> "Canales, películas, series y títulos de Descubrir que has guardado"
+    Tab.REC -> "Grabaciones programadas, en curso y terminadas"
+    Tab.SETTINGS -> "Aspecto, reproducción, cuenta, Descubrir y copia de seguridad"
+    else -> ""
+}
+
+/** Alto fijo del menú de pestañas: el contenido empieza siempre a la misma altura. */
+private val HEADER_H = 56.dp
 
 private fun clock(): String = SimpleDateFormat("HH:mm", Locale("es")).format(Date())

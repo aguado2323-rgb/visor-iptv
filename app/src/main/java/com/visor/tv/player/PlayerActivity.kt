@@ -71,7 +71,11 @@ import com.visor.tv.ui.Type
 import com.visor.tv.ui.VisorTheme
 import com.visor.tv.ui.screens.hm
 import com.visor.tv.ui.screens.startManualRecording
+import androidx.compose.runtime.rememberCoroutineScope
+import com.visor.tv.addons.PlaySource
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 
 class PlayerActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -103,6 +107,8 @@ private fun PlayerScreen(app: VisorApp, onExit: () -> Unit) {
     var panel by remember { mutableStateOf(false) }
     var guide by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
+    /** El error es de buscar la fuente (Descubrir), no del reproductor: el mensaje ya lo explica. */
+    var sourceError by remember { mutableStateOf(false) }
     // Aviso de "siguiente episodio" al final de cada capítulo
     var nextShown by remember { mutableStateOf(false) }
     var nextDismissed by remember { mutableStateOf(false) }
@@ -123,6 +129,14 @@ private fun PlayerScreen(app: VisorApp, onExit: () -> Unit) {
     val firstButton = remember { FocusRequester() }
     val seekFocus = remember { FocusRequester() }
     val isLive = item.kind == "live"
+    // Descubrir: la dirección no se conoce de antemano. Al empezar se busca la mejor fuente y, si una falla
+    // al reproducirse, se prueba la siguiente sin volver a la ficha.
+    val scope = rememberCoroutineScope()
+    var finding by remember { mutableStateOf<String?>(null) }
+    var source by remember { mutableStateOf<PlaySource?>(null) }
+    var sourceFor by remember { mutableStateOf("") }
+    var sourceJob by remember { mutableStateOf<Job?>(null) }
+    val failedSources = remember { mutableSetOf<String>() }
 
     val engine: PlayerEngine = remember(engineType) {
         val audio = app.settings.audioLang.code
@@ -136,15 +150,44 @@ private fun PlayerScreen(app: VisorApp, onExit: () -> Unit) {
         if (!isLive) app.progress.update(item, engine.position(), engine.duration())
     }
 
+    fun startAddon(it: PlayItem) {
+        sourceJob?.cancel()
+        if (sourceFor != it.key) { sourceFor = it.key; source = null; failedSources.clear() }
+        fun go(s: PlaySource) {
+            engine.prepare(s.url, app.progress.positionOf(it.key), false, s.subtitles.map { sub -> ExternalSub(sub.url, sub.lang, langLabel(sub.lang, "Subtítulos") + " (addon)") })
+            playing = true
+        }
+        // Al cambiar de reproductor se sigue con la misma fuente
+        source?.let { s -> go(s); return }
+        finding = if (failedSources.isEmpty()) "Buscando la mejor fuente…" else "Probando otra fuente…"
+        sourceJob = scope.launch {
+            try {
+                val s = app.discover.source(it, failedSources)
+                source = s
+                finding = null
+                go(s)
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                finding = null
+                sourceError = true
+                error = e.message ?: "No se pudo abrir ninguna fuente"
+                overlay = true
+            }
+        }
+    }
+
     fun start(it: PlayItem) {
         error = null
+        sourceError = false
+        if (it.kind == "addon") { startAddon(it); return }
         val url = try { app.repo.urlFor(it, app.settings.liveFormat.ext) } catch (e: Exception) { error = "Sin cuenta"; return }
         engine.prepare(url, app.progress.positionOf(it.key), it.kind == "live")
         playing = true
         app.recents.add(it)
     }
 
-    fun hasNext() = item.kind == "episode" && app.queue.index < app.queue.items.lastIndex
+    fun hasNext() = (item.kind == "episode" || item.kind == "addon") && app.queue.index < app.queue.items.lastIndex
 
     fun playNext() {
         saveProgress()
@@ -154,7 +197,18 @@ private fun PlayerScreen(app: VisorApp, onExit: () -> Unit) {
     }
 
     DisposableEffect(engine) {
-        engine.onError = { error = it; overlay = true }
+        engine.onError = { msg ->
+            val s = source
+            if (item.kind == "addon" && s != null && failedSources.size < 3) {
+                // Esta fuente no se deja reproducir: se guarda por dónde ibas y se prueba la siguiente
+                saveProgress()
+                failedSources += s.streamId
+                source = null
+                start(item)
+            } else {
+                error = msg; overlay = true
+            }
+        }
         engine.onNotice = { notice = it; noticeAt = System.currentTimeMillis() }
         engine.onEnded = {
             saveProgress()
@@ -163,6 +217,7 @@ private fun PlayerScreen(app: VisorApp, onExit: () -> Unit) {
         }
         start(item)
         onDispose {
+            sourceJob?.cancel()
             saveProgress()
             engine.release()
         }
@@ -263,6 +318,12 @@ private fun PlayerScreen(app: VisorApp, onExit: () -> Unit) {
                 Pill((if (!playing) "⏸  " else "") + "−" + mmss(liveDelay) + " del directo", Color.Black.copy(alpha = 0.7f), Color.White)
             }
         }
+        finding?.let { msg ->
+            Column(Modifier.align(Alignment.Center), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                T(msg, Type.h2, Color.White)
+                T(listOf(item.subtitle, item.title).filter { it.isNotBlank() }.joinToString(" · "), Type.small, Color.White.copy(alpha = 0.7f))
+            }
+        }
         notice?.let { msg ->
             Row(Modifier.padding(top = 70.dp, end = 28.dp).align(Alignment.TopEnd)) { Pill(msg, Color.Black.copy(alpha = 0.75f), Color.White) }
         }
@@ -306,8 +367,12 @@ private fun PlayerScreen(app: VisorApp, onExit: () -> Unit) {
                         pos = target
                     }
                 }
+                if (item.kind == "addon" && error == null) source?.let { T("Fuente: ${it.label}", Type.small, p.muted) }
                 if (error != null) {
-                    T("No se pudo reproducir ($error). Prueba con el otro reproductor o con otro formato en Ajustes.", Type.small, p.rec, maxLines = 2)
+                    T(
+                        if (sourceError) "$error." else "No se pudo reproducir ($error). Prueba con el otro reproductor o con otro formato en Ajustes.",
+                        Type.small, p.rec, maxLines = 2,
+                    )
                 }
                 Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     TvButton(if (playing) "Pausa" else "Reanudar", focusRequester = firstButton, onClick = { engine.togglePause() })

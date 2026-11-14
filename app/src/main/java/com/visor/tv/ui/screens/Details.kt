@@ -136,7 +136,7 @@ internal fun TitleArt(
     if (logo.isNullOrBlank() || failed || !loaded) T(title, style, Color.White, maxLines = 2)
 }
 
-private fun hms(ms: Long): String {
+internal fun hms(ms: Long): String {
     val m = (ms / 60_000).coerceAtLeast(1)
     return if (m >= 60) "${m / 60} h ${m % 60} min" else "$m min"
 }
@@ -150,7 +150,7 @@ internal fun fmtDuration(s: String): String {
 }
 
 /** Abre el tráiler de YouTube si hay una app que lo pueda abrir. */
-private fun openTrailer(ctx: Context, code: String): Boolean {
+internal fun openTrailer(ctx: Context, code: String): Boolean {
     val url = if (code.startsWith("http")) code else "https://www.youtube.com/watch?v=$code"
     return try {
         ctx.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
@@ -167,7 +167,7 @@ private fun openTrailer(ctx: Context, code: String): Boolean {
  * altura en vez de ampliarla y pixelarla. Al bajar se oscurece para que mande el contenido.
  */
 @Composable
-private fun CinemaBackdrop(backdrop: String?, poster: String, lower: Boolean) {
+internal fun CinemaBackdrop(backdrop: String?, poster: String, lower: Boolean) {
     val dim by animateFloatAsState(if (lower) 0.62f else 0f, tween(350), label = "oscurecer")
     Box(Modifier.fillMaxSize().background(Color.Black)) {
         if (!backdrop.isNullOrBlank()) {
@@ -235,7 +235,7 @@ internal fun Tag(text: String) {
 
 /** Cabecera pequeña del estado "abajo": título y datos en una línea. */
 @Composable
-private fun CompactHeader(title: String, meta: String, alpha: Float, trailing: String? = null) {
+internal fun CompactHeader(title: String, meta: String, alpha: Float, trailing: String? = null) {
     Row(
         Modifier.fillMaxWidth().padding(start = 48.dp, end = 48.dp, top = 30.dp).alpha(alpha),
         verticalAlignment = Alignment.CenterVertically,
@@ -253,7 +253,7 @@ private fun CompactHeader(title: String, meta: String, alpha: Float, trailing: S
 
 /** Ayuda de teclas abajo en el estado "abajo". */
 @Composable
-private fun KeyHint(text: String, alpha: Float, modifier: Modifier) {
+internal fun KeyHint(text: String, alpha: Float, modifier: Modifier) {
     T(text, Type.small, MUTED, modifier.padding(start = 48.dp, bottom = 18.dp).alpha(alpha))
 }
 
@@ -619,7 +619,7 @@ fun SeriesDetail(app: VisorApp, series: SeriesItem) = CompositionLocalProvider(L
 
 /** Pestaña de temporada: texto con subrayado; al enfocarla se cambia de temporada. */
 @Composable
-private fun SeasonTab(label: String, selected: Boolean, onSelect: () -> Unit) {
+internal fun SeasonTab(label: String, selected: Boolean, onSelect: () -> Unit) {
     Focusable(onClick = onSelect, onFocused = onSelect, shape = RoundedCornerShape(10.dp)) { focused ->
         Column(
             Modifier.background(if (focused) Color.White else Color.Transparent).padding(horizontal = 10.dp, vertical = 5.dp),

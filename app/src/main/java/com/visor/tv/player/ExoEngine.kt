@@ -79,7 +79,7 @@ class ExoEngine(
         })
     }
 
-    override fun prepare(url: String, startMs: Long, isLive: Boolean) {
+    override fun prepare(url: String, startMs: Long, isLive: Boolean, subs: List<ExternalSub>) {
         ts?.close(); ts = null
         delayMs = 0L; pausedAt = 0L
         if (isLive && allowTimeshift && !url.substringBefore('?').endsWith(".m3u8")) {
@@ -90,6 +90,16 @@ class ExoEngine(
         val item = MediaItem.Builder()
             .setUri(url)
             .apply { if (url.substringBefore('?').endsWith(".m3u8")) setMimeType(MimeTypes.APPLICATION_M3U8) }
+            .apply {
+                if (subs.isNotEmpty()) setSubtitleConfigurations(subs.map { s ->
+                    MediaItem.SubtitleConfiguration.Builder(android.net.Uri.parse(s.url))
+                        // Los addons de subtítulos sirven SRT salvo que la dirección diga otra cosa
+                        .setMimeType(if (s.url.substringBefore('?').endsWith(".vtt", true)) MimeTypes.TEXT_VTT else MimeTypes.APPLICATION_SUBRIP)
+                        .setLanguage(s.lang)
+                        .setLabel(s.label)
+                        .build()
+                })
+            }
             .build()
         if (startMs > 0 && !isLive) player.setMediaItem(item, startMs) else player.setMediaItem(item)
         player.prepare()
