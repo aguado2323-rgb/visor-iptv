@@ -195,10 +195,11 @@ fun DiscoverScreen(app: VisorApp, nav: Nav) = CompositionLocalProvider(LocalPale
     val d = app.discover
     var filter by rememberSaveable { mutableStateOf("") } // "", "movie" o "series"
     var searching by rememberSaveable { mutableStateOf(false) }
+    // Mi lista: lo guardado de Descubrir (películas y series de los addons), aparte del resto de favoritos
+    var myList by rememberSaveable { mutableStateOf(false) }
     var focused by remember { mutableStateOf<MetaPreview?>(null) }
     val rows = remember(d.version, filter) { d.rows(filter.ifBlank { null }) }
     val resume = resumes(app).filter { filter.isBlank() || it.meta.type == filter }
-    val mine = app.favorites.of("addon").map { it.toMeta() }.filter { filter.isBlank() || it.type == filter }
     LaunchedEffect(d.version) { d.prefetch() }
 
     // Una sola fila a la vista: ↑ ↓ cambian de fila en el mismo sitio, así nunca queda una fila cortada encima
@@ -216,10 +217,11 @@ fun DiscoverScreen(app: VisorApp, nav: Nav) = CompositionLocalProvider(LocalPale
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
             ) {
-                FilterPill("⌕  Buscar", searching) { searching = !searching }
-                FilterPill("Todo", !searching && filter == "") { searching = false; filter = "" }
-                FilterPill("Películas", !searching && filter == "movie") { searching = false; filter = "movie" }
-                FilterPill("Series", !searching && filter == "series") { searching = false; filter = "series" }
+                FilterPill("⌕  Buscar", searching) { searching = !searching; myList = false }
+                FilterPill("Todo", !searching && !myList && filter == "") { searching = false; myList = false; filter = "" }
+                FilterPill("Películas", !searching && !myList && filter == "movie") { searching = false; myList = false; filter = "movie" }
+                FilterPill("Series", !searching && !myList && filter == "series") { searching = false; myList = false; filter = "series" }
+                FilterPill("★  Mi lista", myList) { myList = true; searching = false; focused = null }
                 Spacer(Modifier.weight(1f))
                 FilterPill("Addons y debrid", false, rememberReturnFocus(nav, "disc:setup")) { nav.open(Route.DiscoverSetup, "disc:setup") }
             }
@@ -227,6 +229,23 @@ fun DiscoverScreen(app: VisorApp, nav: Nav) = CompositionLocalProvider(LocalPale
             if (searching) {
                 BackHandler { searching = false }
                 DiscoverSearch(app, nav)
+            } else if (myList) {
+                BackHandler { myList = false }
+                val saved = app.favorites.of("addon").map { it.toMeta() }
+                Column(Modifier.fillMaxSize().padding(top = 14.dp)) {
+                    Row(Modifier.fillMaxWidth().padding(horizontal = 48.dp), verticalAlignment = Alignment.Bottom) {
+                        T("Mi lista", BIG_TITLE.copy(fontSize = 28.sp, lineHeight = 32.sp), Color.White, Modifier.weight(1f))
+                        val movies = saved.count { !it.isSeries }
+                        T("$movies ${if (movies == 1) "película" else "películas"} · ${saved.size - movies} series", Type.small, MUTED)
+                    }
+                    if (saved.isEmpty()) {
+                        Empty("Aún no has guardado nada. En la ficha de una película o serie pulsa «Mi lista», o ≡ sobre su póster.", Modifier.padding(start = 24.dp))
+                    } else {
+                        T(focused?.let { it.name + "  ·  " + it.line() } ?: "≡ sobre un póster lo quita de la lista", Type.small, Color(0xFFD6D6D0), Modifier.padding(start = 48.dp, top = 4.dp, bottom = 10.dp))
+                        // Lo último guardado, primero
+                        MetaGrid(app, nav, saved.reversed(), "disc:mine", Modifier.fillMaxSize(), PaddingValues(start = 48.dp, end = 48.dp, top = 6.dp, bottom = 28.dp)) { focused = it }
+                    }
+                }
             } else {
 
                 // ---- Lo seleccionado: siempre el mismo hueco, para que las filas no salten ----
@@ -259,7 +278,6 @@ fun DiscoverScreen(app: VisorApp, nav: Nav) = CompositionLocalProvider(LocalPale
 
                 val shelves = buildList {
                     if (resume.isNotEmpty()) add(Shelf("resume", "Seguir viendo", resume = resume))
-                    if (mine.isNotEmpty()) add(Shelf("mine", "Mi lista", items = mine))
                     rows.forEach { r ->
                         val st = d.rowData[r.key] ?: RowData()
                         // Una fila que ha llegado vacía no se enseña
@@ -395,7 +413,7 @@ private fun MetaRow(
 
 /** Cuadrícula de carátulas de Descubrir (resultados de búsqueda, favoritos). */
 @Composable
-fun MetaGrid(app: VisorApp, nav: Nav, list: List<MetaPreview>, prefix: String, modifier: Modifier = Modifier, padding: PaddingValues = PaddingValues(6.dp)) {
+fun MetaGrid(app: VisorApp, nav: Nav, list: List<MetaPreview>, prefix: String, modifier: Modifier = Modifier, padding: PaddingValues = PaddingValues(6.dp), onFocus: ((MetaPreview) -> Unit)? = null) {
     LazyVerticalGrid(
         columns = GridCells.Adaptive(104.dp),
         modifier = modifier,
@@ -414,6 +432,7 @@ fun MetaGrid(app: VisorApp, nav: Nav, list: List<MetaPreview>, prefix: String, m
                 ).joinToString("  "),
                 onClick = { nav.open(Route.Addon(m), k) },
                 onMenu = { app.favorites.toggle(m.toFav()) },
+                onFocused = onFocus?.let { f -> { f(m) } },
                 focusRequester = rememberReturnFocus(nav, k),
             )
         }
