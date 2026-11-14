@@ -127,7 +127,7 @@ fun DiscoverSetupScreen(app: VisorApp, nav: Nav) {
                     Type.small, p.rec, Modifier.padding(horizontal = 12.dp, vertical = 6.dp), maxLines = 3,
                 )
             }
-            item { ListRow("Añadir desde el móvil", subtitle = "Abre una página en el móvil y pega la dirección del addon (la que termina en manifest.json)", onClick = { dialog = SetupDialog.Phone }) }
+            item { ListRow("Añadir desde el móvil o el PC", subtitle = "Abre una página en el navegador y pega la dirección del addon (la que termina en manifest.json)", onClick = { dialog = SetupDialog.Phone }) }
             item { ListRow("Añadir escribiendo la dirección", subtitle = "Con el teclado del mando", onClick = { dialog = SetupDialog.TypeIn(null) }) }
 
             item { section("Cuentas debrid") }
@@ -145,6 +145,15 @@ fun DiscoverSetupScreen(app: VisorApp, nav: Nav) {
                             else -> SetupDialog.Account(k)
                         }
                     },
+                )
+            }
+
+            item { section("Copia de seguridad") }
+            item {
+                ListRow(
+                    "Copia de addons y cuentas",
+                    subtitle = "Descárgala o restáurala desde el navegador del PC o del móvil. Lleva tus claves: guárdala en un sitio seguro",
+                    onClick = { dialog = SetupDialog.Phone },
                 )
             }
 
@@ -366,12 +375,17 @@ private fun PhonePairDialog(app: VisorApp, onDismiss: () -> Unit) {
     val server = remember {
         PairServer(
             listOf("addon" to "Dirección de un addon") + DebridKind.entries.map { it.name to "Clave de ${it.label}" },
-        ) { what, value ->
-            val m = if (what == "addon") d.install(value).let { "${it.manifest.name} añadido" }
-            else DebridKind.valueOf(what).let { k -> d.connectWithKey(k, value); "${k.label} conectada" }
-            received = received + m
-            m
-        }
+            onSubmit = { what, value ->
+                val m = when (what) {
+                    "addon" -> d.install(value).let { "${it.manifest.name} añadido" }
+                    PairServer.RESTORE -> d.restoreBackup(value)
+                    else -> DebridKind.valueOf(what).let { k -> d.connectWithKey(k, value); "${k.label} conectada" }
+                }
+                received = received + m
+                m
+            },
+            backup = { d.exportBackup() },
+        )
     }
     val address = remember { server.start() }
     DisposableEffect(server) {
@@ -380,15 +394,15 @@ private fun PhonePairDialog(app: VisorApp, onDismiss: () -> Unit) {
     }
     val first = remember { FocusRequester() }
 
-    SetupFrame("Añadir desde el móvil", onDismiss) {
+    SetupFrame("Desde el móvil o el PC", onDismiss) {
         if (address == null) {
             T("La tele no parece estar conectada a una red local. Usa la opción de escribir la dirección.", Type.body, p.rec, maxLines = 3)
         } else {
-            T("Con el móvil en la misma wifi, abre en el navegador:", Type.body, p.muted)
+            T("Con el móvil o el PC en la misma red, abre en el navegador:", Type.body, p.muted)
             BigText(address.removePrefix("http://"))
             T("y escribe este código:", Type.body, p.muted)
             BigText(server.code)
-            T("Usa esta opción solo en la red de tu casa. La página se cierra al salir de aquí.", Type.small, p.muted, maxLines = 2)
+            T("Ahí puedes añadir addons y claves, y descargar o restaurar la copia de seguridad de Descubrir. Úsalo solo en la red de tu casa; la página se cierra al salir de aquí.", Type.small, p.muted, maxLines = 3)
             if (locked) T("Demasiados códigos equivocados: la página se ha cerrado.", Type.small, p.rec)
             received.forEach { T("✓ $it", Type.label) }
         }

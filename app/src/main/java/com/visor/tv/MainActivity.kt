@@ -257,21 +257,16 @@ private fun TabsScaffold(app: VisorApp, nav: Nav) {
                         // Inicio y Descubrir van a pantalla completa, con el menú encima de la imagen
                         home || discover -> Modifier
                         guide -> Modifier.padding(top = HEADER_H)
-                        else -> Modifier.padding(start = 40.dp, end = 40.dp, top = HEADER_H + 8.dp)
+                        else -> Modifier.padding(start = 44.dp, end = 44.dp, top = HEADER_H)
                     }
                 )
         ) {
-            when (nav.tab) {
-                Tab.HOME -> HomeScreen(app, nav, homeFocus)
-                Tab.LIVE -> LiveScreen(app)
-                Tab.GUIDE -> GuideScreen(app)
-                Tab.MOVIES -> MoviesScreen(app, nav)
-                Tab.SERIES -> SeriesScreen(app, nav)
-                Tab.DISCOVER -> com.visor.tv.ui.screens.DiscoverScreen(app, nav)
-                Tab.FAVS -> FavoritesScreen(app, nav)
-                Tab.REC -> RecordingsScreen(app)
-                Tab.SETTINGS -> SettingsScreen(app, nav)
-            }
+            // Pantallas normales: título grande bajo el menú, como en la Guía, y el contenido debajo
+            if (!slim) Column(Modifier.fillMaxSize()) {
+                T(nav.tab.label, Type.title.copy(fontSize = 26.sp, lineHeight = 30.sp, fontWeight = androidx.compose.ui.text.font.FontWeight.ExtraBold, letterSpacing = (-0.5).sp), p.text, Modifier.padding(top = 6.dp))
+                T(tabHint(nav.tab), Type.small.copy(fontSize = 12.sp), p.muted, Modifier.padding(top = 4.dp, bottom = 16.dp))
+                Box(Modifier.weight(1f).fillMaxWidth()) { TabContent(app, nav, homeFocus) }
+            } else TabContent(app, nav, homeFocus)
         }
 
         // El menú es siempre el mismo, en el mismo sitio y con el mismo tamaño: al cambiar de pestaña solo cambia
@@ -292,13 +287,6 @@ private fun TabsScaffold(app: VisorApp, nav: Nav) {
                         // Solo se desplaza si no cabe (por ejemplo, con la ventana de un canal abierta)
                         .horizontalScroll(androidx.compose.foundation.rememberScrollState())
                         .onFocusChanged { tabsFocused = it.hasFocus }
-                        // En Inicio, ↓ desde el menú va primero a los puntos de las novedades
-                        .onPreviewKeyEvent { e ->
-                            if (home && homeFocus.dotsReady && e.type == KeyEventType.KeyDown && e.key == Key.DirectionDown) {
-                                try { homeFocus.dots.requestFocus() } catch (_: Exception) { }
-                                true
-                            } else false
-                        }
                         // Al subir desde el contenido se vuelve a la pestaña en la que estás, no a la más cercana
                         .focusProperties { enter = { firstTab } }
                         .focusGroup(),
@@ -309,6 +297,14 @@ private fun TabsScaffold(app: VisorApp, nav: Nav) {
                             onClick = { nav.tab = t },
                             onFocused = { nav.tab = t },
                             focusRequester = if (active) firstTab else null,
+                            // En Inicio, ↓ desde el menú va primero a los puntos de las novedades (← → las cambian)
+                            modifier = Modifier.onPreviewKeyEvent { e ->
+                                if (e.key != Key.DirectionDown || nav.tab != Tab.HOME || !homeFocus.dotsReady) false
+                                else {
+                                    if (e.type == KeyEventType.KeyDown) try { homeFocus.dots.requestFocus() } catch (_: Exception) { }
+                                    true
+                                }
+                            },
                             shape = androidx.compose.foundation.shape.RoundedCornerShape(50),
                         ) { focused ->
                             Box(
@@ -335,6 +331,32 @@ private fun TabsScaffold(app: VisorApp, nav: Nav) {
             }
         }
     }
+}
+
+@Composable
+private fun TabContent(app: VisorApp, nav: Nav, homeFocus: com.visor.tv.ui.screens.HomeFocus) {
+    when (nav.tab) {
+        Tab.HOME -> HomeScreen(app, nav, homeFocus)
+        Tab.LIVE -> LiveScreen(app)
+        Tab.GUIDE -> GuideScreen(app)
+        Tab.MOVIES -> MoviesScreen(app, nav)
+        Tab.SERIES -> SeriesScreen(app, nav)
+        Tab.DISCOVER -> com.visor.tv.ui.screens.DiscoverScreen(app, nav)
+        Tab.FAVS -> FavoritesScreen(app, nav)
+        Tab.REC -> RecordingsScreen(app)
+        Tab.SETTINGS -> SettingsScreen(app, nav)
+    }
+}
+
+/** Frase bajo el título de cada pestaña. */
+private fun tabHint(t: Tab): String = when (t) {
+    Tab.LIVE -> "Los canales de tu lista, por carpetas, con lo que se emite ahora"
+    Tab.MOVIES -> "Las películas de tu proveedor. ≡ sobre una carátula la añade a favoritos"
+    Tab.SERIES -> "Las series de tu proveedor. ≡ sobre una carátula la añade a favoritos"
+    Tab.FAVS -> "Canales, películas, series y títulos de Descubrir que has guardado"
+    Tab.REC -> "Grabaciones programadas, en curso y terminadas"
+    Tab.SETTINGS -> "Aspecto, reproducción, cuenta, Descubrir y copia de seguridad"
+    else -> ""
 }
 
 /** Alto fijo del menú de pestañas: el contenido empieza siempre a la misma altura. */

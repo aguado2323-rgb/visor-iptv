@@ -27,6 +27,8 @@ class PairServer(
     private val options: List<Pair<String, String>>,
     /** Recibe (opción, texto pegado) en el hilo principal y devuelve el mensaje para el móvil. Lanza si falla. */
     private val onSubmit: suspend (what: String, value: String) -> String,
+    /** Contenido de la copia de seguridad que se descarga desde el PC (se pide en el hilo principal). */
+    private val backup: (() -> String)? = null,
 ) {
     val code: String = "%06d".format(SecureRandom().nextInt(1_000_000))
     private var socket: ServerSocket? = null
@@ -65,8 +67,26 @@ class PairServer(
         val length = lines.drop(1).firstOrNull { it.startsWith("content-length:", ignoreCase = true) }
             ?.substringAfter(':')?.trim()?.toIntOrNull() ?: 0
 
+        if (method == "GET" && path == BACKUP_PATH && backup != null) {
+            val q = parts[1].substringAfter('?', "")
+            val ok = parseForm(q)["code"]?.trim() == code
+            if (ok) {
+                val bytes = runBlocking { withContext(Dispatchers.Main) { backup.invoke() } }.toByteArray(Charsets.UTF_8)
+                val name = "visor-descubrir-" + java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.ROOT).format(java.util.Date()) + ".json"
+                val out = c.getOutputStream()
+                out.write(
+                    ("HTTP/1.1 200 OK\r\nContent-Type: application/json; charset=utf-8\r\nContent-Length: ${bytes.size}\r\n" +
+                        "Content-Disposition: attachment; filename=\"$name\"\r\nCache-Control: no-store\r\nConnection: close\r\n\r\n").toByteArray()
+                )
+                out.write(bytes)
+                out.flush()
+                return
+            }
+            if (++failures >= MAX_FAILURES) { stop(); onLocked?.invoke() }
+        }
         val page = when {
             method == "GET" && path == "/" -> form(null, false)
+            method == "GET" && path == BACKUP_PATH -> form("El código no coincide con el de la tele.", true)
             method == "POST" && path == "/" -> {
                 if (length !in 1..MAX_BODY) form("El texto es demasiado largo.", true)
                 else {
@@ -99,7 +119,8 @@ class PairServer(
         }
         val what = f["what"].orEmpty()
         val value = f["value"].orEmpty().trim()
-        if (options.none { it.first == what } || value.isBlank()) return form("Falta pegar el texto.", true)
+        if ((options.none { it.first == what } && !(what == RESTORE && backup != null)) || value.isBlank())
+            return form(if (what == RESTORE) "Elige primero el archivo de la copia." else "Falta pegar el texto.", true)
         return try {
             val msg = runBlocking { withContext(Dispatchers.Main) { onSubmit(what, value) } }
             form(msg, false)
@@ -110,6 +131,25 @@ class PairServer(
 
     private fun form(message: String?, error: Boolean): String {
         val opts = options.joinToString("") { (k, label) -> "<option value=\"${esc(k)}\">${esc(label)}</option>" }
+        val backupHtml = if (backup == null) "" else """
+<h1 style="margin-top:36px">Copia de seguridad</h1>
+<p>Descarga un archivo con tus addons y cuentas debrid para restaurarlos más tarde, en esta tele o en otra.
+Guárdalo en un sitio seguro: lleva dentro tus claves.</p>
+<form method="get" action="$BACKUP_PATH" autocomplete="off">
+<label>Código que ves en la tele</label><input name="code" inputmode="numeric" maxlength="6" required>
+<button type="submit">Descargar copia</button>
+</form>
+<form method="post" action="/" autocomplete="off" id="rf">
+<label>Restaurar una copia (sustituye los addons y cuentas actuales)</label>
+<input type="file" accept=".json,application/json" id="rfile">
+<input type="hidden" name="what" value="$RESTORE">
+<textarea name="value" id="rval" style="display:none"></textarea>
+<label>Código que ves en la tele</label><input name="code" inputmode="numeric" maxlength="6" required>
+<button type="submit">Restaurar en la tele</button>
+</form>
+<script>
+document.getElementById('rfile').addEventListener('change',function(e){var f=e.target.files[0];if(!f)return;var r=new FileReader();r.onload=function(){document.getElementById('rval').value=r.result};r.readAsText(f)});
+</script>"""
         val note = if (message == null) "" else "<p class=\"${if (error) "err" else "ok"}\">${esc(message)}</p>"
         return """<!doctype html><html lang="es"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1"><title>Visor</title>
@@ -128,19 +168,25 @@ $note
 <label>Qué vas a añadir</label><select name="what">$opts</select>
 <label>Dirección o clave</label><textarea name="value" required autocapitalize="off" autocorrect="off" spellcheck="false"></textarea>
 <button type="submit">Enviar a la tele</button>
-</form></body></html>"""
+</form>
+$backupHtml
+</body></html>"""
     }
 
-    private companion object {
-        const val PORT = 8765
-        const val MAX_BODY = 8192
-        const val MAX_HEAD = 8192
-        const val MAX_FAILURES = 5
+    companion object {
+        /** Valor de "what" con el que llega una copia de seguridad para restaurar. */
+        const val RESTORE = "restore"
+        private const val BACKUP_PATH = "/copia.json"
+        private const val PORT = 8765
+        // Una copia con varios addons de dirección larga puede ocupar decenas de KB
+        private const val MAX_BODY = 512 * 1024
+        private const val MAX_HEAD = 8192
+        private const val MAX_FAILURES = 5
 
-        fun esc(s: String) = s.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace("\"", "&quot;")
+        private fun esc(s: String) = s.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace("\"", "&quot;")
 
         /** Lee hasta la línea en blanco que separa las cabeceras del cuerpo. */
-        fun readHead(input: InputStream): String? {
+        private fun readHead(input: InputStream): String? {
             val buf = ByteArrayOutputStream()
             var state = 0
             while (buf.size() < MAX_HEAD) {
@@ -157,14 +203,14 @@ $note
             return null
         }
 
-        fun parseForm(body: String): Map<String, String> = body.split('&').mapNotNull {
+        private fun parseForm(body: String): Map<String, String> = body.split('&').mapNotNull {
             val i = it.indexOf('=')
             if (i <= 0) null else try {
                 URLDecoder.decode(it.substring(0, i), "UTF-8") to URLDecoder.decode(it.substring(i + 1), "UTF-8")
             } catch (e: Exception) { null }
         }.toMap()
 
-        fun localIp(): String? = try {
+        private fun localIp(): String? = try {
             NetworkInterface.getNetworkInterfaces().asSequence()
                 .filter { it.isUp && !it.isLoopback }
                 .flatMap { it.inetAddresses.asSequence() }

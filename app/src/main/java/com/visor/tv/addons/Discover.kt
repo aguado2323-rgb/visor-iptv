@@ -66,6 +66,20 @@ data class RowData(val items: List<MetaPreview>? = null, val error: String? = nu
 /** Lo que el reproductor necesita para empezar. */
 data class PlaySource(val url: String, val streamId: String, val label: String, val subtitles: List<AddonSubtitle> = emptyList())
 
+/**
+ * Copia de seguridad de Descubrir: addons (con su dirección completa, que puede llevar claves) y cuentas debrid.
+ * Se descarga desde el PC con la página de "Añadir desde el móvil o el PC"; nunca entra en la copia general.
+ */
+@Serializable
+data class DiscoverBackup(
+    val app: String = "visor",
+    val kind: String = "discover",
+    val version: Int = 1,
+    val created: Long = 0,
+    val addons: List<InstalledAddon> = emptyList(),
+    val debrid: List<DebridAccount> = emptyList(),
+)
+
 /** Fuente elegida la última vez para un título o una serie (sin direcciones: solo para reconocerla). */
 @Serializable
 private data class Pick(val streamId: String = "", val bingeGroup: String = "")
@@ -316,6 +330,29 @@ class Discover(context: Context, http: OkHttpClient, private val vault: SecureSt
             .mapNotNull { s -> iso2(s.lang)?.takeIf { it in wanted }?.let { s.copy(lang = it) } }
             .groupBy { it.lang }.flatMap { it.value.take(2) }
             .sortedBy { wanted.indexOf(it.lang) }
+    }
+
+    // ---------------- Copia de seguridad ----------------
+
+    private val pretty = Json { ignoreUnknownKeys = true; prettyPrint = true; encodeDefaults = true }
+
+    fun exportBackup(): String =
+        pretty.encodeToString(DiscoverBackup(created = System.currentTimeMillis(), addons = addons.toList(), debrid = accounts.toList()))
+
+    /** Sustituye addons y cuentas por los de la copia. Devuelve un resumen para mostrar. */
+    fun restoreBackup(text: String): String {
+        val b = try { json.decodeFromString<DiscoverBackup>(text.trim()) } catch (e: Exception) { null }
+        if (b == null || b.app != "visor" || b.kind != "discover") throw IOException("Eso no es una copia de seguridad de Descubrir")
+        if (b.addons.isEmpty() && b.debrid.isEmpty()) throw IOException("La copia está vacía")
+        if (b.addons.isNotEmpty()) {
+            addons.clear(); addons.addAll(b.addons.distinctBy { it.key })
+            saveAddons()
+        }
+        if (b.debrid.isNotEmpty()) {
+            accounts.clear(); accounts.addAll(b.debrid.distinctBy { it.kind })
+            saveAccounts()
+        }
+        return "Copia restaurada: ${b.addons.size} addons y ${b.debrid.size} cuentas debrid"
     }
 
     // ---------------- Cuentas debrid ----------------
