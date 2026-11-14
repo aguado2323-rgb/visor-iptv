@@ -12,7 +12,8 @@ data class StreamInfo(
     val codec: String,
     val audio: String,
     val sizeBytes: Long,
-    val spanish: Boolean,
+    /** Español: 3 = de España (castellano, 🇪🇸), 2 = sin decir cuál, 1 = latino, 0 = no lleva. */
+    val spanishLevel: Int,
     val multi: Boolean,
     /** En la caché del debrid: empieza al instante. null = el addon no lo dice. */
     val cached: Boolean?,
@@ -31,6 +32,12 @@ data class StreamInfo(
 
     /** Etiquetas cortas para la fila: 4K, HDR, HEVC, Atmos… */
     val tags: List<String> get() = listOf(quality, hdr, codec, audio).filter { it.isNotBlank() }
+
+    val spanish: Boolean get() = spanishLevel > 0
+
+    /** Idioma para enseñar en la lista de fuentes. */
+    val language: String?
+        get() = when (spanishLevel) { 3 -> "Castellano"; 2 -> "Español"; 1 -> "Latino"; else -> if (multi) "Multi" else null }
 }
 
 /** Preferencias de Ajustes para elegir fuente. */
@@ -61,7 +68,10 @@ object StreamRanker {
     private val CH = Regex("""\b([57])[. ]1\b""")
     private val SIZE = Regex("""(?i)(\d+(?:[.,]\d+)?)\s*(gb|gib|mb|mib)\b""")
     private val CAM = Regex("""(?i)\b(cam|camrip|hdcam|ts|hdts|telesync|tc|hdtc|telecine|scr|screener|dvdscr)\b""")
-    private val SPANISH = Regex("""(?i)(🇪🇸|🇲🇽|🇦🇷|\b(spanish|espa[ñn]ol|castellano|latino|spa|esp|cast|lat)\b)""")
+    // Español de España, latino y "español" a secas, por separado: el de España va primero
+    private val SPAIN = Regex("""(?i)(🇪🇸|\b(castellano|cast|es-es|spain|españa|spanish\s*\(spain\)|spanish\s*\(es\))\b)""")
+    private val LATIN = Regex("""(?i)(🇲🇽|🇦🇷|🇨🇴|🇨🇱|🇵🇪|🇻🇪|\b(latino|latin|lat|latam|es-mx|es-419|mexican|mexicano)\b)""")
+    private val SPANISH = Regex("""(?i)\b(spanish|espa[ñn]ol|spa|esp)\b""")
     private val MULTI = Regex("""(?i)\b(multi|dual)\b""")
     // "[RD+]" o "⚡" = en caché; "[RD download]" o "⏳" = habría que descargarlo antes
     private val CACHED = Regex("""(\[[A-Z]{2,3}\+]|⚡|\binstant\b)""")
@@ -113,11 +123,19 @@ object StreamRanker {
         }
         return StreamInfo(
             stream = s, height = height, hdr = hdr, codec = codec, audio = audio, sizeBytes = size,
-            spanish = SPANISH.containsMatchIn(text), multi = MULTI.containsMatchIn(text),
+            spanishLevel = spanishLevel(text), multi = MULTI.containsMatchIn(text),
             cached = cached,
             // La extensión ".ts" de un archivo no es un "telesync": se quita antes de mirar
             cam = CAM.containsMatchIn(s.filename.ifBlank { s.description.lineSequence().firstOrNull().orEmpty() }.replace(EXT, "")),
         )
+    }
+
+    /** Una versión con audio de España y latino a la vez cuenta como de España. */
+    fun spanishLevel(text: String): Int = when {
+        SPAIN.containsMatchIn(text) -> 3
+        LATIN.containsMatchIn(text) -> 1
+        SPANISH.containsMatchIn(text) -> 2
+        else -> 0
     }
 
     /**
@@ -135,7 +153,8 @@ object StreamRanker {
                     // Lo que no está en caché obliga a esperar la descarga: siempre después
                     .thenByDescending { it.cached != false }
                     .thenByDescending { it.height <= prefs.maxHeight && it.sizeBytes <= maxBytes }
-                    .thenByDescending { prefs.spanishFirst && it.spanish }
+                    // Español de España, luego español sin especificar, luego latino
+                    .thenByDescending { if (prefs.spanishFirst) it.spanishLevel else 0 }
                     .thenByDescending { if (it.height <= prefs.maxHeight) it.height else -it.height }
                     .thenByDescending { prefs.spanishFirst && it.multi }
                     .thenByDescending { it.cached == true }

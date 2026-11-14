@@ -228,7 +228,7 @@ internal fun parsePreview(o: JsonObject, fallbackType: String = ""): MetaPreview
         description = o.s("description"),
         year = release.replace('–', '-').trim().trimEnd('-'),
         rating = o.s("imdbRating").toDoubleOrNull()?.takeIf { it > 0 }?.let { "%.1f".format(java.util.Locale.US, it) } ?: "",
-        genres = (o["genres"].strings().ifEmpty { o["genre"].strings() }).take(2).joinToString(" · "),
+        genres = (o["genres"].strings().ifEmpty { o["genre"].strings() }).take(2).joinToString(" · ") { genreEs(it) },
     )
 }
 
@@ -293,3 +293,19 @@ internal fun parseSubtitle(o: JsonObject): AddonSubtitle? {
     if (!url.startsWith("http")) return null
     return AddonSubtitle(id = o.s("id").ifBlank { url }, url = url, lang = o.s("lang"))
 }
+
+
+/** Los catálogos más comunes dan los géneros en inglés. */
+private val GENRES_ES = mapOf(
+    "action" to "Acción", "adventure" to "Aventura", "animation" to "Animación", "biography" to "Biografía",
+    "comedy" to "Comedia", "crime" to "Crimen", "documentary" to "Documental", "drama" to "Drama",
+    "family" to "Familia", "fantasy" to "Fantasía", "history" to "Historia", "horror" to "Terror",
+    "music" to "Música", "musical" to "Musical", "mystery" to "Misterio", "romance" to "Romance",
+    "sci-fi" to "Ciencia ficción", "science fiction" to "Ciencia ficción", "sport" to "Deporte", "sports" to "Deporte",
+    "thriller" to "Suspense", "war" to "Bélica", "western" to "Western", "reality-tv" to "Reality", "reality" to "Reality",
+    "talk-show" to "Entrevistas", "game-show" to "Concursos", "news" to "Noticias", "film-noir" to "Cine negro",
+    "short" to "Corto", "kids" to "Infantil", "anime" to "Anime", "soap" to "Telenovela",
+    "action & adventure" to "Acción y aventura", "sci-fi & fantasy" to "Ciencia ficción y fantasía", "war & politics" to "Bélica y política",
+)
+
+internal fun genreEs(g: String): String = GENRES_ES[g.trim().lowercase()] ?: g.trim()

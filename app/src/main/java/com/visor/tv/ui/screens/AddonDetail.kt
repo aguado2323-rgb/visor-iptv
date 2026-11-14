@@ -440,7 +440,7 @@ private fun StreamRow(s: StreamInfo, playable: Boolean, focusRequester: FocusReq
             Column(Modifier.weight(1f)) {
                 val facts = listOfNotNull(
                     s.hdr.ifBlank { null }, s.codec.ifBlank { null }, s.audio.ifBlank { null },
-                    when { s.spanish -> "Español"; s.multi -> "Multi"; else -> null },
+                    s.language,
                     s.size.ifBlank { null },
                 ).joinToString("  ·  ")
                 T(facts.ifBlank { s.stream.name.replace('\n', ' ').ifBlank { "Fuente" } }, Type.label, fg)
